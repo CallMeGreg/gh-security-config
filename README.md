@@ -86,7 +86,7 @@ When attaching configurations to repositories, you can choose:
 
 ## Example
 
-
+![Demo of gh-security-config generate](images/gh-security-config-demo.gif)
 
 ## Development
 
