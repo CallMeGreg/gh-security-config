@@ -36,7 +36,10 @@ var generateCmd = &cobra.Command{
 	RunE:  runGenerate,
 }
 
+var elevateRole bool
+
 func init() {
+	generateCmd.Flags().BoolVar(&elevateRole, "elevate-role", false, "Automatically elevate enterprise owner to org owner in each organization")
 	rootCmd.AddCommand(generateCmd)
 }
 
@@ -67,6 +70,16 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	if serverURL != "" {
 		os.Setenv("GH_HOST", serverURL)
 		pterm.Info.Printf("Using GitHub Enterprise Server: %s\n", serverURL)
+	}
+
+	// Get current user if elevation is requested
+	var currentUser string
+	if elevateRole {
+		currentUser, err = getCurrentUser()
+		if err != nil {
+			return fmt.Errorf("failed to get current user for role elevation: %w", err)
+		}
+		pterm.Info.Printf("Role elevation enabled for user: %s\n", currentUser)
 	}
 
 	// Fetch organizations
@@ -108,7 +121,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Confirm before proceeding
-	confirmed, err := confirmOperation(orgs, configName, configDescription, settings, scope, setAsDefault)
+	confirmed, err := confirmOperation(orgs, configName, configDescription, settings, scope, setAsDefault, elevateRole, currentUser)
 	if err != nil {
 		return err
 	}
@@ -125,6 +138,17 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 	for _, org := range orgs {
 		progressbar.UpdateTitle(fmt.Sprintf("Processing %s", org))
+
+		// Elevate role if requested
+		if elevateRole {
+			err := elevateUserToOrgOwner(org, currentUser)
+			if err != nil {
+				pterm.Warning.Printf("Failed to elevate role in organization '%s': %v\n", org, err)
+				// Continue processing even if role elevation fails
+			} else {
+				pterm.Success.Printf("Elevated '%s' to owner in organization '%s'\n", currentUser, org)
+			}
+		}
 
 		err := processOrganization(org, configName, configDescription, settings, scope, setAsDefault)
 		if err != nil {
@@ -253,7 +277,7 @@ func getDefaultSetting() (bool, error) {
 	return setDefault, nil
 }
 
-func confirmOperation(orgs []string, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool) (bool, error) {
+func confirmOperation(orgs []string, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool, elevateRole bool, currentUser string) (bool, error) {
 	pterm.Println()
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgYellow)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Println("Operation Summary")
 
@@ -284,6 +308,12 @@ func confirmOperation(orgs []string, configName, configDescription string, setti
 
 	pterm.Printf("Attachment Scope: %s\n", pterm.Magenta(scope))
 	pterm.Printf("Set as Default: %s\n", pterm.Cyan(fmt.Sprintf("%t", setAsDefault)))
+	
+	if elevateRole {
+		pterm.Printf("Elevate Role: %s (user: %s)\n", pterm.Green("true"), pterm.Yellow(currentUser))
+	} else {
+		pterm.Printf("Elevate Role: %s\n", pterm.Red("false"))
+	}
 	pterm.Println()
 
 	confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Proceed with creating security configurations?").Show()
@@ -485,4 +515,56 @@ func setConfigurationAsDefault(org string, configID int) error {
 
 	_, _, err = gh.Exec("api", "--method", "PUT", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d/defaults", org, configID), "--input", tmpFile.Name())
 	return err
+}
+
+// getCurrentUser gets the username of the currently authenticated user
+func getCurrentUser() (string, error) {
+	response, stderr, err := gh.Exec("api", "user", "--jq", ".login")
+	if err != nil {
+		pterm.Error.Printf("Failed to get current user: %v\n", err)
+		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
+		return "", err
+	}
+
+	username := strings.TrimSpace(response.String())
+	if username == "" {
+		return "", fmt.Errorf("unable to determine current username")
+	}
+
+	return username, nil
+}
+
+// elevateUserToOrgOwner elevates the specified user to org owner role
+func elevateUserToOrgOwner(org, username string) error {
+	body := map[string]interface{}{
+		"role": "admin",
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	// Create temporary file for the JSON body
+	tmpFile, err := os.CreateTemp("", "elevate-role-*.json")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if _, err := tmpFile.Write(bodyBytes); err != nil {
+		return err
+	}
+	tmpFile.Close()
+
+	// Execute the gh API command to set organization membership
+	_, stderr, err := gh.Exec("api", "--method", "PUT", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/members/%s", org, username), "--input", tmpFile.Name())
+	if err != nil {
+		pterm.Error.Printf("Failed to elevate user '%s' to owner in org '%s': %v\n", username, org, err)
+		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
+		return err
+	}
+
+	return nil
 }
