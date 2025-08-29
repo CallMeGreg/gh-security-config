@@ -536,30 +536,8 @@ func getCurrentUser() (string, error) {
 
 // elevateUserToOrgOwner elevates the specified user to org owner role
 func elevateUserToOrgOwner(org, username string) error {
-	body := map[string]interface{}{
-		"role": "admin",
-	}
-
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-
-	// Create temporary file for the JSON body
-	tmpFile, err := os.CreateTemp("", "elevate-role-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
-
-	if _, err := tmpFile.Write(bodyBytes); err != nil {
-		return err
-	}
-	tmpFile.Close()
-
 	// Execute the gh API command to set organization membership
-	_, stderr, err := gh.Exec("api", "--method", "PUT", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/members/%s", org, username), "--input", tmpFile.Name())
+	_, stderr, err := gh.Exec("api", "--method", "PUT", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/memberships/%s", org, username), "-f", "role=admin")
 	if err != nil {
 		pterm.Error.Printf("Failed to elevate user '%s' to owner in org '%s': %v\n", username, org, err)
 		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
