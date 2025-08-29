@@ -24,6 +24,9 @@ gh auth login -s "read:enterprise,admin:org"
 > [!IMPORTANT]
 > Enterprise admins do not inherently have access to all of the organizations in the enterprise. You must ensure that your account has the necessary permissions to access the organizations you want to modify.
 
+> [!NOTE]
+> When using the `--elevate-role` flag, the extension will automatically elevate your enterprise owner account to org owner in each organization. This requires enterprise owner privileges and will use the [Set organization membership for a user](https://docs.github.com/en/enterprise-cloud@latest/rest/orgs/members?apiVersion=2022-11-28#set-organization-membership-for-a-user) API.
+
 ## Installation
 
 To install this extension, run the following command:
@@ -39,6 +42,14 @@ Run the interactive security configuration generator:
 gh security-config generate
 ```
 
+### Command Line Options
+
+- `--elevate-role`: Automatically elevate the enterprise owner to org owner in each organization before processing
+
+```bash
+gh security-config generate --elevate-role
+```
+
 The extension will guide you through:
 
 1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
@@ -48,7 +59,8 @@ The extension will guide you through:
    - `public` - Public repositories only
    - `private_or_internal` - Private and internal repositories only
 4. **Default Setting**: Optionally set the configuration as default for new repositories
-5. **Confirmation**: Review and confirm the operation before execution
+5. **Role Elevation** (if `--elevate-role` flag is used): Automatically elevate the current user to org owner before processing each organization
+6. **Confirmation**: Review and confirm the operation before execution
 
 ## Features
 
@@ -61,6 +73,7 @@ The extension will guide you through:
   - Enforcement
 - 🎯 **Flexible Targeting**: Choose which repositories to apply configurations to
 - ⚙️ **Default Configuration**: Optionally set configurations as defaults for new repositories
+- 👑 **Role Elevation**: Automatically elevate enterprise owners to org owners across all organizations
 - 📊 **Progress Tracking**: Visual progress indicators
 - 🖥️ **GitHub Enterprise Server Support**: Works with both GitHub.com and GitHub Enterprise Server
 
