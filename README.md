@@ -99,7 +99,7 @@ go build -o gh-security-config
 To run the extension locally:
 
 ```bash
-./gh-security-config security-config generate
+./gh-security-config generate
 ```
 
 ## Contributing
