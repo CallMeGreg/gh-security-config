@@ -211,17 +211,21 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	successCount := 0
 	errorCount := 0
+	skippedCount := 0
 
 	for _, org := range orgs {
 		progressbar.UpdateTitle(fmt.Sprintf("Processing %s", org))
 
-		err := deleteConfigurationFromOrg(org, configName)
+		deleted, err := deleteConfigurationFromOrg(org, configName)
 		if err != nil {
 			pterm.Error.Printf("Failed to delete configuration from organization '%s': %v\n", org, err)
 			errorCount++
-		} else {
+		} else if deleted {
 			pterm.Success.Printf("Successfully deleted configuration from organization '%s'\n", org)
 			successCount++
+		} else {
+			// Configuration was not found, already logged as warning in deleteConfigurationFromOrg
+			skippedCount++
 		}
 
 		progressbar.Increment()
@@ -229,7 +233,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	progressbar.Stop()
 
-	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Printf("Security Configuration Deletion Complete! (Success: %d, Errors: %d)", successCount, errorCount)
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Printf("Security Configuration Deletion Complete! (Success: %d, Skipped: %d, Errors: %d)", successCount, skippedCount, errorCount)
 
 	return nil
 }
@@ -613,27 +617,27 @@ func confirmDeleteOperation(orgs []string, configName string) (bool, error) {
 	return confirmed, nil
 }
 
-func deleteConfigurationFromOrg(org, configName string) error {
+func deleteConfigurationFromOrg(org, configName string) (bool, error) {
 	// First, fetch security configurations for the organization
 	configs, err := fetchSecurityConfigurations(org)
 	if err != nil {
-		return fmt.Errorf("failed to fetch security configurations: %w", err)
+		return false, fmt.Errorf("failed to fetch security configurations: %w", err)
 	}
 
 	// Find the configuration by name
 	configID, found := findConfigurationByName(configs, configName)
 	if !found {
 		pterm.Warning.Printf("Configuration '%s' not found in organization '%s', skipping\n", configName, org)
-		return nil // Not an error, just skip this org
+		return false, nil // Not an error, just skip this org
 	}
 
 	// Delete the configuration
 	err = deleteSecurityConfiguration(org, configID)
 	if err != nil {
-		return fmt.Errorf("failed to delete security configuration: %w", err)
+		return false, fmt.Errorf("failed to delete security configuration: %w", err)
 	}
 
-	return nil
+	return true, nil
 }
 
 func fetchSecurityConfigurations(org string) ([]SecurityConfiguration, error) {
