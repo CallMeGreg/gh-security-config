@@ -5,6 +5,9 @@ A GitHub CLI extension to create and apply security configurations across all or
 > [!NOTE]
 > This extension currently only supports configuring GitHub Advanced Security and Secret Scanning features as part of a security configuration.
 
+> [!TIP]
+> For GitHub Enterprise Server 3.16+ and GitHub Enterprise Cloud it's recommended to use [Enterprise Security Configurations](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-code-security/securing-your-enterprise/about-security-configurations) instead of this solution.
+
 ## Pre-requisites
 
 1. For [GitHub Advanced Security](https://docs.github.com/en/enterprise-cloud@latest/get-started/learning-about-github/about-github-advanced-security) features, your organizations need appropriate licensing.
