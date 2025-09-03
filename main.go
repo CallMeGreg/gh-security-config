@@ -131,14 +131,33 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 	progressbar, _ := pterm.DefaultProgressbar.WithTotal(len(orgs)).WithTitle("Processing organizations").Start()
 
+	successCount := 0
+	skippedCount := 0
+	errorCount := 0
+
 	for _, org := range orgs {
 		progressbar.UpdateTitle(fmt.Sprintf("Processing %s", org))
 
-		err := processOrganization(org, configName, configDescription, settings, scope, setAsDefault)
+		// Check membership for this specific organization
+		status, err := checkSingleOrganizationMembership(org)
 		if err != nil {
-			pterm.Error.Printf("Failed to process organization '%s': %v\n", org, err)
+			pterm.Warning.Printf("Failed to check membership for organization '%s': %v, skipping\n", org, err)
+			skippedCount++
+		} else if !status.IsMember {
+			pterm.Warning.Printf("Skipping organization '%s': You are not a member\n", org)
+			skippedCount++
+		} else if !status.IsOwner {
+			pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
+			skippedCount++
 		} else {
-			pterm.Success.Printf("Successfully processed organization '%s'\n", org)
+			err := processOrganization(org, configName, configDescription, settings, scope, setAsDefault)
+			if err != nil {
+				pterm.Error.Printf("Failed to process organization '%s': %v\n", org, err)
+				errorCount++
+			} else {
+				pterm.Success.Printf("Successfully processed organization '%s'\n", org)
+				successCount++
+			}
 		}
 
 		progressbar.Increment()
@@ -146,7 +165,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 	progressbar.Stop()
 
-	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Println("Security Configuration Generation Complete!")
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Printf("Security Configuration Generation Complete! (Success: %d, Skipped: %d, Errors: %d)", successCount, skippedCount, errorCount)
 
 	return nil
 }
@@ -216,16 +235,29 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	for _, org := range orgs {
 		progressbar.UpdateTitle(fmt.Sprintf("Processing %s", org))
 
-		deleted, err := deleteConfigurationFromOrg(org, configName)
+		// Check membership for this specific organization
+		status, err := checkSingleOrganizationMembership(org)
 		if err != nil {
-			pterm.Error.Printf("Failed to delete configuration from organization '%s': %v\n", org, err)
-			errorCount++
-		} else if deleted {
-			pterm.Success.Printf("Successfully deleted configuration from organization '%s'\n", org)
-			successCount++
-		} else {
-			// Configuration was not found, already logged as warning in deleteConfigurationFromOrg
+			pterm.Warning.Printf("Failed to check membership for organization '%s': %v, skipping\n", org, err)
 			skippedCount++
+		} else if !status.IsMember {
+			pterm.Warning.Printf("Skipping organization '%s': You are not a member\n", org)
+			skippedCount++
+		} else if !status.IsOwner {
+			pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
+			skippedCount++
+		} else {
+			deleted, err := deleteConfigurationFromOrg(org, configName)
+			if err != nil {
+				pterm.Error.Printf("Failed to delete configuration from organization '%s': %v\n", org, err)
+				errorCount++
+			} else if deleted {
+				pterm.Success.Printf("Successfully deleted configuration from organization '%s'\n", org)
+				successCount++
+			} else {
+				// Configuration was not found, already logged as warning in deleteConfigurationFromOrg
+				skippedCount++
+			}
 		}
 
 		progressbar.Increment()
@@ -456,6 +488,62 @@ func formatCursor(cursor *string) string {
 		return "null"
 	}
 	return fmt.Sprintf(`"%s"`, *cursor)
+}
+
+// MembershipStatus represents the user's membership status in an organization
+type MembershipStatus struct {
+	IsMember bool
+	IsOwner  bool
+	Role     string
+}
+
+func getCurrentUser() (string, error) {
+	userResponse, _, err := gh.Exec("api", "user", "-q", ".login")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(userResponse.String()), nil
+}
+
+func checkSingleOrganizationMembership(org string) (MembershipStatus, error) {
+	// Get current user's login first
+	currentUser, err := getCurrentUser()
+	if err != nil {
+		return MembershipStatus{}, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	// Use REST API to check membership and role directly
+	userResponse, stderr, err := gh.Exec("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/memberships/%s", org, currentUser))
+	if err != nil {
+		// If we get a 404 or similar error, the user is likely not a member
+		if strings.Contains(stderr.String(), "404") || strings.Contains(stderr.String(), "Not Found") {
+			return MembershipStatus{IsMember: false, IsOwner: false, Role: "none"}, nil
+		}
+		return MembershipStatus{IsMember: false, IsOwner: false, Role: "none"}, nil
+	}
+
+	var membership struct {
+		State string `json:"state"`
+		Role  string `json:"role"`
+	}
+
+	if err := json.Unmarshal(userResponse.Bytes(), &membership); err != nil {
+		pterm.Warning.Printf("Failed to parse membership data for organization '%s': %v\n", org, err)
+		return MembershipStatus{IsMember: false, IsOwner: false, Role: "none"}, nil
+	}
+
+	// Check if membership is active and determine role
+	if membership.State == "active" {
+		isOwner := membership.Role == "admin"
+		return MembershipStatus{
+			IsMember: true,
+			IsOwner:  isOwner,
+			Role:     membership.Role,
+		}, nil
+	}
+
+	// If state is not active, treat as not a member
+	return MembershipStatus{IsMember: false, IsOwner: false, Role: "none"}, nil
 }
 
 func processOrganization(org, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool) error {
