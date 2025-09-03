@@ -36,6 +36,8 @@ gh extension install CallMeGreg/gh-security-config
 
 ## Usage
 
+### Generate Security Configurations
+
 Run the interactive security configuration generator:
 
 ```bash
@@ -53,6 +55,23 @@ The extension will guide you through:
 4. **Default Setting**: Optionally set the configuration as default for new repositories
 5. **Confirmation**: Review and confirm the operation before execution
 
+### Delete Security Configurations
+
+Run the interactive security configuration deletion:
+
+```bash
+gh security-config delete
+```
+
+The extension will guide you through:
+
+1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
+2. **Configuration Selection**: Specify the name of the security configuration to delete
+3. **Confirmation**: Review the operation summary and confirm deletion (defaults to cancel for safety)
+
+> [!WARNING]
+> The delete operation will remove the specified security configuration from ALL organizations in the enterprise. This action cannot be undone. Repositories will retain their security settings but will no longer be associated with the configuration.
+
 ## Features
 
 - 🏢 **Enterprise-wide Management**: Automatically discovers and processes all organizations in your enterprise
@@ -63,6 +82,8 @@ The extension will guide you through:
   - Secret Scanning Non-Provider Patterns
   - Enforcement
 - 🎯 **Flexible Targeting**: Choose which repositories to apply configurations to
+- ➕ **Configuration Generation**: Create and apply security configurations across all enterprise organizations
+- ❌ **Configuration Deletion**: Safely delete security configurations from all enterprise organizations with confirmation prompts
 - ⚙️ **Default Configuration**: Optionally set configurations as defaults for new repositories
 - 📊 **Progress Tracking**: Visual progress indicators
 - 🖥️ **GitHub Enterprise Server Support**: Works with both GitHub.com and GitHub Enterprise Server
