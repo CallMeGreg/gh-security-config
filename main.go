@@ -36,8 +36,16 @@ var generateCmd = &cobra.Command{
 	RunE:  runGenerate,
 }
 
+var deleteCmd = &cobra.Command{
+	Use:   "delete",
+	Short: "Delete security configurations across enterprise organizations",
+	Long:  "Interactive command to delete security configurations from all organizations in an enterprise",
+	RunE:  runDelete,
+}
+
 func init() {
 	rootCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(deleteCmd)
 }
 
 func main() {
@@ -139,6 +147,89 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	progressbar.Stop()
 
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Println("Security Configuration Generation Complete!")
+
+	return nil
+}
+
+func runDelete(cmd *cobra.Command, args []string) error {
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgRed)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Enterprise Security Configuration Deletion")
+	pterm.Println()
+
+	// Get enterprise name
+	enterprise, err := getEnterpriseInput()
+	if err != nil {
+		return err
+	}
+
+	// Get GitHub Enterprise Server URL if needed
+	serverURL, err := getServerURLInput()
+	if err != nil {
+		return err
+	}
+
+	// Set hostname if using GitHub Enterprise Server
+	if serverURL != "" {
+		os.Setenv("GH_HOST", serverURL)
+		pterm.Info.Printf("Using GitHub Enterprise Server: %s\n", serverURL)
+	}
+
+	// Fetch organizations
+	pterm.Info.Println("Fetching organizations from enterprise...")
+	orgs, err := fetchOrganizations(enterprise)
+	if err != nil {
+		return err
+	}
+
+	if len(orgs) == 0 {
+		pterm.Warning.Println("No organizations found in the enterprise.")
+		return nil
+	}
+
+	pterm.Success.Printf("Found %d organizations in enterprise '%s'\n", len(orgs), enterprise)
+
+	// Get security configuration name to delete
+	configName, err := getConfigNameForDeletion()
+	if err != nil {
+		return err
+	}
+
+	// Confirm before proceeding
+	confirmed, err := confirmDeleteOperation(orgs, configName)
+	if err != nil {
+		return err
+	}
+
+	if !confirmed {
+		pterm.Info.Println("Operation cancelled.")
+		return nil
+	}
+
+	// Process each organization
+	pterm.Info.Printf("Processing %d organizations...\n", len(orgs))
+
+	progressbar, _ := pterm.DefaultProgressbar.WithTotal(len(orgs)).WithTitle("Deleting configurations").Start()
+
+	successCount := 0
+	errorCount := 0
+
+	for _, org := range orgs {
+		progressbar.UpdateTitle(fmt.Sprintf("Processing %s", org))
+
+		err := deleteConfigurationFromOrg(org, configName)
+		if err != nil {
+			pterm.Error.Printf("Failed to delete configuration from organization '%s': %v\n", org, err)
+			errorCount++
+		} else {
+			pterm.Success.Printf("Successfully deleted configuration from organization '%s'\n", org)
+			successCount++
+		}
+
+		progressbar.Increment()
+	}
+
+	progressbar.Stop()
+
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Printf("Security Configuration Deletion Complete! (Success: %d, Errors: %d)", successCount, errorCount)
 
 	return nil
 }
@@ -485,4 +576,98 @@ func setConfigurationAsDefault(org string, configID int) error {
 
 	_, _, err = gh.Exec("api", "--method", "PUT", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d/defaults", org, configID), "--input", tmpFile.Name())
 	return err
+}
+
+// Helper functions for delete functionality
+
+func getConfigNameForDeletion() (string, error) {
+	configName, err := pterm.DefaultInteractiveTextInput.WithDefaultText("").WithMultiLine(false).Show("Enter the name of the security configuration to delete")
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(configName) == "" {
+		return "", fmt.Errorf("configuration name is required")
+	}
+
+	return strings.TrimSpace(configName), nil
+}
+
+func confirmDeleteOperation(orgs []string, configName string) (bool, error) {
+	pterm.Println()
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgRed)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("DELETE OPERATION SUMMARY")
+
+	pterm.Printf("Organizations: %d\n", len(orgs))
+	pterm.Printf("Configuration to Delete: %s\n", pterm.Red(configName))
+	pterm.Println()
+
+	pterm.Warning.Println("WARNING: This operation will delete the security configuration from ALL organizations in the enterprise.")
+	pterm.Warning.Println("This action cannot be undone. Repositories will retain their settings but will no longer be associated with the configuration.")
+	pterm.Println()
+
+	confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Are you absolutely sure you want to proceed with deleting this configuration?").WithDefaultValue(false).Show()
+	if err != nil {
+		return false, err
+	}
+
+	return confirmed, nil
+}
+
+func deleteConfigurationFromOrg(org, configName string) error {
+	// First, fetch security configurations for the organization
+	configs, err := fetchSecurityConfigurations(org)
+	if err != nil {
+		return fmt.Errorf("failed to fetch security configurations: %w", err)
+	}
+
+	// Find the configuration by name
+	configID, found := findConfigurationByName(configs, configName)
+	if !found {
+		pterm.Warning.Printf("Configuration '%s' not found in organization '%s', skipping\n", configName, org)
+		return nil // Not an error, just skip this org
+	}
+
+	// Delete the configuration
+	err = deleteSecurityConfiguration(org, configID)
+	if err != nil {
+		return fmt.Errorf("failed to delete security configuration: %w", err)
+	}
+
+	return nil
+}
+
+func fetchSecurityConfigurations(org string) ([]SecurityConfiguration, error) {
+	response, stderr, err := gh.Exec("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations", org))
+	if err != nil {
+		pterm.Error.Printf("Failed to fetch security configurations for org '%s': %v\n", org, err)
+		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
+		return nil, err
+	}
+
+	var configs []SecurityConfiguration
+	if err := json.Unmarshal(response.Bytes(), &configs); err != nil {
+		return nil, err
+	}
+
+	return configs, nil
+}
+
+func findConfigurationByName(configs []SecurityConfiguration, name string) (int, bool) {
+	for _, config := range configs {
+		if config.Name == name {
+			return config.ID, true
+		}
+	}
+	return 0, false
+}
+
+func deleteSecurityConfiguration(org string, configID int) error {
+	_, stderr, err := gh.Exec("api", "--method", "DELETE", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d", org, configID))
+	if err != nil {
+		pterm.Error.Printf("Failed to delete security configuration %d from org '%s': %v\n", configID, org, err)
+		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
+		return err
+	}
+
+	return nil
 }
