@@ -54,10 +54,18 @@ var deleteCmd = &cobra.Command{
 	RunE:  runDelete,
 }
 
+var modifyCmd = &cobra.Command{
+	Use:   "modify",
+	Short: "Modify existing security configurations across enterprise organizations",
+	Long:  "Interactive command to update existing security configurations across all organizations in an enterprise",
+	RunE:  runModify,
+}
+
 func init() {
 	generateCmd.Flags().Bool("force", false, "Force deletion of existing configurations with the same name before creating new ones")
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(deleteCmd)
+	rootCmd.AddCommand(modifyCmd)
 }
 
 func main() {
@@ -291,6 +299,155 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	progressbar.Stop()
 
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Printf("Security Configuration Deletion Complete! (Success: %d, Skipped: %d, Errors: %d)", successCount, skippedCount, errorCount)
+
+	return nil
+}
+
+func runModify(cmd *cobra.Command, args []string) error {
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgMagenta)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Enterprise Security Configuration Modification")
+	pterm.Println()
+
+	// Get enterprise name
+	enterprise, err := getEnterpriseInput()
+	if err != nil {
+		return err
+	}
+
+	// Get GitHub Enterprise Server URL if needed
+	serverURL, err := getServerURLInput()
+	if err != nil {
+		return err
+	}
+
+	// Set hostname if using GitHub Enterprise Server
+	if serverURL != "" {
+		os.Setenv("GH_HOST", serverURL)
+		pterm.Info.Printf("Using GitHub Enterprise Server: %s\n", serverURL)
+	}
+
+	// Fetch organizations
+	pterm.Info.Println("Fetching organizations from enterprise...")
+	orgs, err := fetchOrganizations(enterprise)
+	if err != nil {
+		return err
+	}
+
+	if len(orgs) == 0 {
+		pterm.Warning.Println("No organizations found in the enterprise.")
+		return nil
+	}
+
+	pterm.Success.Printf("Found %d organizations in enterprise '%s'\n", len(orgs), enterprise)
+
+	// Get security configuration name to modify
+	configName, err := getConfigNameForModification()
+	if err != nil {
+		return err
+	}
+
+	// Fetch existing configuration details from first accessible organization to show current settings
+	var currentSettings map[string]interface{}
+	var currentDescription string
+	for _, org := range orgs {
+		// Check membership for this specific organization
+		status, err := checkSingleOrganizationMembership(org)
+		if err != nil || !status.IsMember || !status.IsOwner {
+			continue
+		}
+
+		configs, err := fetchSecurityConfigurations(org)
+		if err != nil {
+			continue
+		}
+
+		configID, found := findConfigurationByName(configs, configName)
+		if found {
+			// Get detailed configuration
+			configDetails, err := getSecurityConfigurationDetails(org, configID)
+			if err == nil {
+				currentSettings = configDetails.Settings
+				currentDescription = configDetails.Description
+				break
+			}
+		}
+	}
+
+	if currentSettings == nil {
+		pterm.Warning.Printf("Configuration '%s' not found in any accessible organizations.\n", configName)
+		return fmt.Errorf("configuration '%s' not found", configName)
+	}
+
+	// Show current settings and get new settings
+	pterm.Info.Println("Current configuration settings:")
+	displayCurrentSettings(currentSettings, currentDescription)
+	pterm.Println()
+
+	// Get new description
+	newDescription, err := getUpdatedDescription(currentDescription)
+	if err != nil {
+		return err
+	}
+
+	// Get updated security settings
+	newSettings, err := getSecuritySettingsForUpdate(currentSettings)
+	if err != nil {
+		return err
+	}
+
+	// Confirm before proceeding
+	confirmed, err := confirmModifyOperation(orgs, configName, currentDescription, newDescription, currentSettings, newSettings)
+	if err != nil {
+		return err
+	}
+
+	if !confirmed {
+		pterm.Info.Println("Operation cancelled.")
+		return nil
+	}
+
+	// Process each organization
+	pterm.Info.Printf("Processing %d organizations...\n", len(orgs))
+
+	progressbar, _ := pterm.DefaultProgressbar.WithTotal(len(orgs)).WithTitle("Modifying configurations").Start()
+
+	successCount := 0
+	errorCount := 0
+	skippedCount := 0
+
+	for _, org := range orgs {
+		progressbar.UpdateTitle(fmt.Sprintf("Processing %s", org))
+
+		// Check membership for this specific organization
+		status, err := checkSingleOrganizationMembership(org)
+		if err != nil {
+			pterm.Warning.Printf("Failed to check membership for organization '%s': %v, skipping\n", org, err)
+			skippedCount++
+		} else if !status.IsMember {
+			pterm.Warning.Printf("Skipping organization '%s': You are not a member\n", org)
+			skippedCount++
+		} else if !status.IsOwner {
+			pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
+			skippedCount++
+		} else {
+			updated, err := modifyConfigurationInOrg(org, configName, newDescription, newSettings)
+			if err != nil {
+				pterm.Error.Printf("Failed to modify configuration in organization '%s': %v\n", org, err)
+				errorCount++
+			} else if updated {
+				pterm.Success.Printf("Successfully modified configuration in organization '%s'\n", org)
+				successCount++
+			} else {
+				// Configuration was not found, already logged as warning in modifyConfigurationInOrg
+				skippedCount++
+			}
+		}
+
+		progressbar.Increment()
+	}
+
+	progressbar.Stop()
+
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Printf("Security Configuration Modification Complete! (Success: %d, Skipped: %d, Errors: %d)", successCount, skippedCount, errorCount)
 
 	return nil
 }
@@ -717,6 +874,247 @@ func setConfigurationAsDefault(org string, configID int) error {
 
 	_, _, err = gh.Exec("api", "--method", "PUT", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d/defaults", org, configID), "--input", tmpFile.Name())
 	return err
+}
+
+// Helper functions for modify functionality
+
+type SecurityConfigurationDetails struct {
+	ID          int                    `json:"id"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Settings    map[string]interface{} `json:"-"` // Will be populated separately
+}
+
+func getConfigNameForModification() (string, error) {
+	configName, err := pterm.DefaultInteractiveTextInput.WithDefaultText("").WithMultiLine(false).Show("Enter the name of the security configuration to modify")
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(configName) == "" {
+		return "", fmt.Errorf("configuration name is required")
+	}
+
+	return strings.TrimSpace(configName), nil
+}
+
+func getSecurityConfigurationDetails(org string, configID int) (*SecurityConfigurationDetails, error) {
+	response, stderr, err := gh.Exec("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d", org, configID))
+	if err != nil {
+		pterm.Error.Printf("Failed to fetch security configuration details for org '%s': %v\n", org, err)
+		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
+		return nil, err
+	}
+
+	var configResponse map[string]interface{}
+	if err := json.Unmarshal(response.Bytes(), &configResponse); err != nil {
+		return nil, err
+	}
+
+	details := &SecurityConfigurationDetails{
+		Settings: make(map[string]interface{}),
+	}
+
+	// Extract basic info
+	if id, ok := configResponse["id"].(float64); ok {
+		details.ID = int(id)
+	}
+	if name, ok := configResponse["name"].(string); ok {
+		details.Name = name
+	}
+	if desc, ok := configResponse["description"].(string); ok {
+		details.Description = desc
+	}
+
+	// Extract security settings
+	securitySettings := []string{
+		"advanced_security", "secret_scanning", "secret_scanning_push_protection",
+		"secret_scanning_non_provider_patterns", "enforcement",
+	}
+
+	for _, setting := range securitySettings {
+		if val, exists := configResponse[setting]; exists {
+			details.Settings[setting] = val
+		}
+	}
+
+	return details, nil
+}
+
+func displayCurrentSettings(settings map[string]interface{}, description string) {
+	pterm.Printf("  Description: %s\n", pterm.Yellow(description))
+	for key, value := range settings {
+		valueStr := fmt.Sprintf("%v", value)
+		var coloredValue string
+
+		switch valueStr {
+		case "enabled", "enforced":
+			coloredValue = pterm.Green(valueStr)
+		case "disabled", "unenforced":
+			coloredValue = pterm.Red(valueStr)
+		case "not_set":
+			coloredValue = pterm.Yellow(valueStr)
+		default:
+			coloredValue = pterm.Yellow(valueStr)
+		}
+
+		pterm.Printf("  %s: %s\n", pterm.Cyan(key), coloredValue)
+	}
+}
+
+func getUpdatedDescription(currentDescription string) (string, error) {
+	newDescription, err := pterm.DefaultInteractiveTextInput.WithDefaultText(currentDescription).WithMultiLine(false).Show("Enter updated security configuration description")
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(newDescription), nil
+}
+
+func getSecuritySettingsForUpdate(currentSettings map[string]interface{}) (map[string]interface{}, error) {
+	newSettings := make(map[string]interface{})
+
+	pterm.Info.Println("Update security settings (press Enter to keep current value):")
+
+	settingsConfig := []struct {
+		key          string
+		description  string
+		options      []string
+		defaultValue string
+	}{
+		{"advanced_security", "GitHub Advanced Security", []string{"enabled", "disabled"}, "enabled"},
+		{"secret_scanning", "Secret Scanning", []string{"enabled", "disabled", "not_set"}, "enabled"},
+		{"secret_scanning_push_protection", "Secret Scanning Push Protection", []string{"enabled", "disabled", "not_set"}, "enabled"},
+		{"secret_scanning_non_provider_patterns", "Secret Scanning Non-Provider Patterns", []string{"enabled", "disabled", "not_set"}, "disabled"},
+		{"enforcement", "Enforcement Status", []string{"enforced", "unenforced"}, "enforced"},
+	}
+
+	for _, config := range settingsConfig {
+		currentValue := "not_set"
+		if val, exists := currentSettings[config.key]; exists {
+			currentValue = fmt.Sprintf("%v", val)
+		}
+
+		// Add option to keep current value
+		options := append([]string{fmt.Sprintf("Keep current (%s)", currentValue)}, config.options...)
+
+		selection, err := pterm.DefaultInteractiveSelect.WithOptions(options).WithDefaultOption(options[0]).Show(config.description)
+		if err != nil {
+			return nil, err
+		}
+
+		// If user chose to keep current value, use the current value
+		if strings.HasPrefix(selection, "Keep current") {
+			newSettings[config.key] = currentValue
+		} else {
+			newSettings[config.key] = selection
+		}
+	}
+
+	return newSettings, nil
+}
+
+func confirmModifyOperation(orgs []string, configName, currentDescription, newDescription string, currentSettings, newSettings map[string]interface{}) (bool, error) {
+	pterm.Println()
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgYellow)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Println("MODIFY OPERATION SUMMARY")
+
+	pterm.Printf("Organizations: %d\n", len(orgs))
+	pterm.Printf("Configuration to Modify: %s\n", pterm.Magenta(configName))
+	pterm.Println()
+
+	// Show changes
+	pterm.Info.Println("Changes to be made:")
+
+	// Description changes
+	if currentDescription != newDescription {
+		pterm.Printf("  Description: %s → %s\n", pterm.Red(currentDescription), pterm.Green(newDescription))
+	} else {
+		pterm.Printf("  Description: %s (no change)\n", pterm.Yellow(currentDescription))
+	}
+
+	// Setting changes
+	for key, newValue := range newSettings {
+		currentValue := fmt.Sprintf("%v", currentSettings[key])
+		newValueStr := fmt.Sprintf("%v", newValue)
+
+		if currentValue != newValueStr {
+			pterm.Printf("  %s: %s → %s\n", pterm.Cyan(key), pterm.Red(currentValue), pterm.Green(newValueStr))
+		} else {
+			pterm.Printf("  %s: %s (no change)\n", pterm.Cyan(key), pterm.Yellow(currentValue))
+		}
+	}
+
+	pterm.Println()
+
+	confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Proceed with modifying security configurations?").Show()
+	if err != nil {
+		return false, err
+	}
+
+	return confirmed, nil
+}
+
+func modifyConfigurationInOrg(org, configName, newDescription string, newSettings map[string]interface{}) (bool, error) {
+	// First, fetch security configurations for the organization
+	configs, err := fetchSecurityConfigurations(org)
+	if err != nil {
+		return false, fmt.Errorf("failed to fetch security configurations: %w", err)
+	}
+
+	// Find the configuration by name
+	configID, found := findConfigurationByName(configs, configName)
+	if !found {
+		pterm.Warning.Printf("Configuration '%s' not found in organization '%s', skipping\n", configName, org)
+		return false, nil // Not an error, just skip this org
+	}
+
+	// Update the configuration
+	err = updateSecurityConfiguration(org, configID, newDescription, newSettings)
+	if err != nil {
+		return false, fmt.Errorf("failed to update security configuration: %w", err)
+	}
+
+	return true, nil
+}
+
+func updateSecurityConfiguration(org string, configID int, description string, settings map[string]interface{}) error {
+	// Build the request body for PATCH request
+	body := map[string]interface{}{
+		"description": description,
+	}
+
+	// Add all settings to the body
+	for key, value := range settings {
+		body[key] = value
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	// Create temporary file for the JSON body
+	tmpFile, err := os.CreateTemp("", "update-config-*.json")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if _, err := tmpFile.Write(bodyBytes); err != nil {
+		return err
+	}
+	tmpFile.Close()
+
+	// Execute the gh API command with PATCH method
+	_, stderr, err := gh.Exec("api", "--method", "PATCH", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d", org, configID), "--input", tmpFile.Name())
+	if err != nil {
+		pterm.Error.Printf("Failed to update security configuration %d for org '%s': %v\n", configID, org, err)
+		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
+		return err
+	}
+
+	return nil
 }
 
 // Helper functions for delete functionality
