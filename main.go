@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -21,6 +22,16 @@ type SecurityConfiguration struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+}
+
+// ConfigurationExistsError represents an error when a security configuration already exists
+type ConfigurationExistsError struct {
+	ConfigName string
+	OrgName    string
+}
+
+func (e *ConfigurationExistsError) Error() string {
+	return fmt.Sprintf("configuration '%s' already exists in organization '%s'", e.ConfigName, e.OrgName)
 }
 
 var rootCmd = &cobra.Command{
@@ -152,8 +163,15 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		} else {
 			err := processOrganization(org, configName, configDescription, settings, scope, setAsDefault)
 			if err != nil {
-				pterm.Error.Printf("Failed to process organization '%s': %v\n", org, err)
-				errorCount++
+				// Check if this is a "configuration exists" error
+				var configExistsErr *ConfigurationExistsError
+				if errors.As(err, &configExistsErr) {
+					pterm.Warning.Printf("Configuration '%s' already exists in organization '%s', skipping\n", configName, org)
+					skippedCount++
+				} else {
+					pterm.Error.Printf("Failed to process organization '%s': %v\n", org, err)
+					errorCount++
+				}
 			} else {
 				pterm.Success.Printf("Successfully processed organization '%s'\n", org)
 				successCount++
@@ -547,6 +565,21 @@ func checkSingleOrganizationMembership(org string) (MembershipStatus, error) {
 }
 
 func processOrganization(org, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool) error {
+	// Check if a configuration with the same name already exists
+	configs, err := fetchSecurityConfigurations(org)
+	if err != nil {
+		return fmt.Errorf("failed to fetch existing security configurations: %w", err)
+	}
+	
+	// Check if configuration already exists
+	_, exists := findConfigurationByName(configs, configName)
+	if exists {
+		return &ConfigurationExistsError{
+			ConfigName: configName,
+			OrgName:    org,
+		}
+	}
+
 	// Create security configuration
 	configID, err := createSecurityConfiguration(org, configName, configDescription, settings)
 	if err != nil {
