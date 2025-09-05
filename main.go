@@ -55,6 +55,7 @@ var deleteCmd = &cobra.Command{
 }
 
 func init() {
+	generateCmd.Flags().Bool("force", false, "Force deletion of existing configurations with the same name before creating new ones")
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(deleteCmd)
 }
@@ -69,6 +70,12 @@ func main() {
 func runGenerate(cmd *cobra.Command, args []string) error {
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgBlue)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Enterprise Security Configuration Generator")
 	pterm.Println()
+
+	// Get force flag value
+	force, err := cmd.Flags().GetBool("force")
+	if err != nil {
+		return err
+	}
 
 	// Get enterprise name
 	enterprise, err := getEnterpriseInput()
@@ -161,7 +168,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
 			skippedCount++
 		} else {
-			err := processOrganization(org, configName, configDescription, settings, scope, setAsDefault)
+			err := processOrganization(org, configName, configDescription, settings, scope, setAsDefault, force)
 			if err != nil {
 				// Check if this is a "configuration exists" error
 				var configExistsErr *ConfigurationExistsError
@@ -564,19 +571,28 @@ func checkSingleOrganizationMembership(org string) (MembershipStatus, error) {
 	return MembershipStatus{IsMember: false, IsOwner: false, Role: "none"}, nil
 }
 
-func processOrganization(org, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool) error {
+func processOrganization(org, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool, force bool) error {
 	// Check if a configuration with the same name already exists
 	configs, err := fetchSecurityConfigurations(org)
 	if err != nil {
 		return fmt.Errorf("failed to fetch existing security configurations: %w", err)
 	}
-	
+
 	// Check if configuration already exists
-	_, exists := findConfigurationByName(configs, configName)
+	existingConfigID, exists := findConfigurationByName(configs, configName)
 	if exists {
-		return &ConfigurationExistsError{
-			ConfigName: configName,
-			OrgName:    org,
+		if force {
+			// Delete the existing configuration
+			pterm.Info.Printf("Force flag enabled: deleting existing configuration '%s' from organization '%s'\n", configName, org)
+			err = deleteSecurityConfiguration(org, existingConfigID)
+			if err != nil {
+				return fmt.Errorf("failed to delete existing security configuration: %w", err)
+			}
+		} else {
+			return &ConfigurationExistsError{
+				ConfigName: configName,
+				OrgName:    org,
+			}
 		}
 	}
 
