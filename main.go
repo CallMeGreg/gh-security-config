@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -49,56 +48,64 @@ func (e *ConfigurationExistsError) Error() string {
 var rateLimitHandler = &RateLimitHandler{}
 
 // isRateLimitError checks if an error is due to rate limiting
-func isRateLimitError(err error, stderr string) bool {
+// It checks for HTTP status codes 403 or 429 AND x-ratelimit-remaining: 0
+func isRateLimitError(err error, stderr string) (bool, string) {
 	if err == nil {
-		return false
+		return false, ""
 	}
 	
-	errorStr := strings.ToLower(err.Error())
-	stderrStr := strings.ToLower(stderr)
+	errorStr := err.Error()
+	stderrStr := stderr
 	
-	// Check for common rate limit indicators
-	rateLimitIndicators := []string{
-		"rate limit exceeded",
-		"api rate limit exceeded",
-		"secondary rate limit",
-		"abuse detection",
-		"you have exceeded",
-		"x-ratelimit-remaining: 0",
+	// Check for HTTP status codes 403 or 429
+	hasRateLimitStatus := strings.Contains(errorStr, "403") || strings.Contains(errorStr, "429") ||
+		strings.Contains(stderrStr, "403") || strings.Contains(stderrStr, "429")
+	
+	if !hasRateLimitStatus {
+		return false, ""
 	}
 	
-	for _, indicator := range rateLimitIndicators {
-		if strings.Contains(errorStr, indicator) || strings.Contains(stderrStr, indicator) {
-			return true
-		}
+	// Check for x-ratelimit-remaining: 0 in stderr (gh CLI includes headers in stderr)
+	if strings.Contains(strings.ToLower(stderrStr), "x-ratelimit-remaining: 0") {
+		// Extract x-ratelimit-reset header value if present
+		resetHeader := extractHeaderValue(stderrStr, "x-ratelimit-reset")
+		return true, resetHeader
 	}
 	
-	return false
+	return false, ""
 }
 
-// parseRateLimitFromError attempts to extract rate limit reset time from error messages
-func parseRateLimitFromError(err error, stderr string) time.Time {
-	// Try to find reset time in error message
-	// GitHub CLI might include messages like "Try again in 42 minutes"
-	errorText := err.Error() + " " + stderr
+// extractHeaderValue extracts a header value from the stderr output
+func extractHeaderValue(stderr, headerName string) string {
+	lines := strings.Split(stderr, "\n")
+	headerPrefix := strings.ToLower(headerName) + ":"
 	
-	// Look for "try again in X minutes/seconds" patterns
-	minutePattern := regexp.MustCompile(`try again in (\d+) minutes?`)
-	secondPattern := regexp.MustCompile(`try again in (\d+) seconds?`)
-	
-	if matches := minutePattern.FindStringSubmatch(errorText); len(matches) > 1 {
-		if minutes, err := strconv.Atoi(matches[1]); err == nil {
-			return time.Now().Add(time.Duration(minutes) * time.Minute)
+	for _, line := range lines {
+		lineLower := strings.ToLower(strings.TrimSpace(line))
+		if strings.HasPrefix(lineLower, headerPrefix) {
+			// Extract the value after the colon
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				return strings.TrimSpace(parts[1])
+			}
 		}
 	}
-	
-	if matches := secondPattern.FindStringSubmatch(errorText); len(matches) > 1 {
-		if seconds, err := strconv.Atoi(matches[1]); err == nil {
-			return time.Now().Add(time.Duration(seconds) * time.Second)
-		}
+	return ""
+}
+
+// parseRateLimitReset parses the x-ratelimit-reset header value to get reset time
+func parseRateLimitReset(resetHeaderValue string) time.Time {
+	if resetHeaderValue == "" {
+		// Default to 1 hour if we can't parse the reset time
+		return time.Now().Add(1 * time.Hour)
 	}
 	
-	// Default to 1 hour if we can't parse the reset time
+	// The x-ratelimit-reset header contains a Unix timestamp
+	if resetTimestamp, err := strconv.ParseInt(resetHeaderValue, 10, 64); err == nil {
+		return time.Unix(resetTimestamp, 0)
+	}
+	
+	// Default to 1 hour if parsing fails
 	return time.Now().Add(1 * time.Hour)
 }
 
@@ -169,8 +176,9 @@ func ghExecWithRateLimit(args ...string) (bytes.Buffer, bytes.Buffer, error) {
 		// Check if this is a rate limit error
 		stderrStr := stderr.String()
 		
-		if isRateLimitError(err, stderrStr) {
-			resetTime := parseRateLimitFromError(err, stderrStr)
+		isRateLimit, resetHeaderValue := isRateLimitError(err, stderrStr)
+		if isRateLimit {
+			resetTime := parseRateLimitReset(resetHeaderValue)
 			rateLimitHandler.reset = resetTime
 			
 			// Wait for rate limit reset
@@ -180,15 +188,7 @@ func ghExecWithRateLimit(args ...string) (bytes.Buffer, bytes.Buffer, error) {
 			continue
 		}
 		
-		// If it's not a rate limit error, check if we should retry
-		// For 403 errors that might be rate limits but not clearly identified
-		if strings.Contains(err.Error(), "403") && attempt < maxRetries-1 {
-			pterm.Warning.Printf("Received 403 error, checking if rate limited (attempt %d/%d)...\n", 
-				attempt+1, maxRetries)
-			continue
-		}
-		
-		// For other errors, return immediately
+		// For other errors, return immediately without retrying
 		break
 	}
 	
