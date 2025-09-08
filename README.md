@@ -72,6 +72,25 @@ The extension will guide you through:
 > [!WARNING]
 > The delete operation will remove the specified security configuration from ALL organizations in the enterprise. This action cannot be undone. Repositories will retain their security settings but will no longer be associated with the configuration.
 
+### Modify Security Configurations
+
+Run the interactive security configuration modification:
+
+```bash
+gh security-config modify
+```
+
+The extension will guide you through:
+
+1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
+2. **Configuration Selection**: Specify the name of the security configuration to modify
+3. **Current Settings Display**: View the current configuration settings and description
+4. **Settings Update**: Interactively update each security setting with options to keep current values
+5. **Confirmation**: Review the changes and confirm modification before execution
+
+> [!INFO]
+> The modify operation will update the specified security configuration across ALL organizations in the enterprise where it exists. Organizations without the configuration will be skipped.
+
 ## Features
 
 - 🏢 **Enterprise-wide Management**: Automatically discovers and processes all organizations in your enterprise
@@ -83,6 +102,7 @@ The extension will guide you through:
   - Enforcement
 - 🎯 **Flexible Targeting**: Choose which repositories to apply configurations to
 - ➕ **Configuration Generation**: Create and apply security configurations across all enterprise organizations
+- ✏️ **Configuration Modification**: Update existing security configurations across all enterprise organizations with selective setting changes
 - ❌ **Configuration Deletion**: Safely delete security configurations from all enterprise organizations with confirmation prompts
 - ⚙️ **Default Configuration**: Optionally set configurations as defaults for new repositories
 - 📊 **Progress Tracking**: Visual progress indicators
