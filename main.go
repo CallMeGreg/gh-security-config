@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cli/go-gh/v2"
 	"github.com/pterm/pterm"
@@ -24,6 +28,13 @@ type SecurityConfiguration struct {
 	Description string `json:"description"`
 }
 
+// RateLimitHandler manages GitHub API rate limit state and retry logic
+type RateLimitHandler struct {
+	remaining int
+	limit     int
+	reset     time.Time
+}
+
 // ConfigurationExistsError represents an error when a security configuration already exists
 type ConfigurationExistsError struct {
 	ConfigName string
@@ -32,6 +43,157 @@ type ConfigurationExistsError struct {
 
 func (e *ConfigurationExistsError) Error() string {
 	return fmt.Sprintf("configuration '%s' already exists in organization '%s'", e.ConfigName, e.OrgName)
+}
+
+// Global rate limit handler instance
+var rateLimitHandler = &RateLimitHandler{}
+
+// isRateLimitError checks if an error is due to rate limiting
+func isRateLimitError(err error, stderr string) bool {
+	if err == nil {
+		return false
+	}
+	
+	errorStr := strings.ToLower(err.Error())
+	stderrStr := strings.ToLower(stderr)
+	
+	// Check for common rate limit indicators
+	rateLimitIndicators := []string{
+		"rate limit exceeded",
+		"api rate limit exceeded",
+		"secondary rate limit",
+		"abuse detection",
+		"you have exceeded",
+		"x-ratelimit-remaining: 0",
+	}
+	
+	for _, indicator := range rateLimitIndicators {
+		if strings.Contains(errorStr, indicator) || strings.Contains(stderrStr, indicator) {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// parseRateLimitFromError attempts to extract rate limit reset time from error messages
+func parseRateLimitFromError(err error, stderr string) time.Time {
+	// Try to find reset time in error message
+	// GitHub CLI might include messages like "Try again in 42 minutes"
+	errorText := err.Error() + " " + stderr
+	
+	// Look for "try again in X minutes/seconds" patterns
+	minutePattern := regexp.MustCompile(`try again in (\d+) minutes?`)
+	secondPattern := regexp.MustCompile(`try again in (\d+) seconds?`)
+	
+	if matches := minutePattern.FindStringSubmatch(errorText); len(matches) > 1 {
+		if minutes, err := strconv.Atoi(matches[1]); err == nil {
+			return time.Now().Add(time.Duration(minutes) * time.Minute)
+		}
+	}
+	
+	if matches := secondPattern.FindStringSubmatch(errorText); len(matches) > 1 {
+		if seconds, err := strconv.Atoi(matches[1]); err == nil {
+			return time.Now().Add(time.Duration(seconds) * time.Second)
+		}
+	}
+	
+	// Default to 1 hour if we can't parse the reset time
+	return time.Now().Add(1 * time.Hour)
+}
+
+// waitForRateLimit waits until the rate limit reset time with user feedback
+func waitForRateLimit(resetTime time.Time) {
+	now := time.Now()
+	if resetTime.Before(now) {
+		return
+	}
+	
+	duration := resetTime.Sub(now)
+	pterm.Warning.Printf("Rate limit exceeded. Waiting until %s (%v)...\n", 
+		resetTime.Format("15:04:05"), duration.Round(time.Second))
+	
+	// Show a progress bar for longer waits
+	if duration > 30*time.Second {
+		progressbar, _ := pterm.DefaultProgressbar.
+			WithTotal(int(duration.Seconds())).
+			WithTitle("Waiting for rate limit reset").
+			Start()
+		
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		
+		elapsed := 0
+		for range ticker.C {
+			now = time.Now()
+			if now.After(resetTime) {
+				progressbar.UpdateTitle("Rate limit reset - continuing")
+				progressbar.Stop()
+				break
+			}
+			elapsed++
+			progressbar.Increment()
+		}
+	} else {
+		time.Sleep(duration)
+	}
+	
+	pterm.Success.Println("Rate limit reset - continuing...")
+}
+
+// ghExecWithRateLimit wraps gh.Exec with rate limit detection and retry logic
+func ghExecWithRateLimit(args ...string) (bytes.Buffer, bytes.Buffer, error) {
+	const maxRetries = 3
+	var lastErr error
+	var lastStderr bytes.Buffer
+	
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			// Add exponential backoff for subsequent attempts
+			backoffDuration := time.Duration(attempt*attempt) * time.Second
+			pterm.Info.Printf("Retrying API request (attempt %d/%d) after %v...\n", 
+				attempt+1, maxRetries, backoffDuration)
+			time.Sleep(backoffDuration)
+		}
+		
+		stdout, stderr, err := gh.Exec(args...)
+		
+		// If successful, return immediately
+		if err == nil {
+			return stdout, stderr, nil
+		}
+		
+		lastErr = err
+		lastStderr = stderr
+		
+		// Check if this is a rate limit error
+		stderrStr := stderr.String()
+		
+		if isRateLimitError(err, stderrStr) {
+			resetTime := parseRateLimitFromError(err, stderrStr)
+			rateLimitHandler.reset = resetTime
+			
+			// Wait for rate limit reset
+			waitForRateLimit(resetTime)
+			
+			// Continue to retry after waiting
+			continue
+		}
+		
+		// If it's not a rate limit error, check if we should retry
+		// For 403 errors that might be rate limits but not clearly identified
+		if strings.Contains(err.Error(), "403") && attempt < maxRetries-1 {
+			pterm.Warning.Printf("Received 403 error, checking if rate limited (attempt %d/%d)...\n", 
+				attempt+1, maxRetries)
+			continue
+		}
+		
+		// For other errors, return immediately
+		break
+	}
+	
+	var emptyBuffer bytes.Buffer
+	return emptyBuffer, lastStderr, lastErr
 }
 
 var rootCmd = &cobra.Command{
@@ -623,7 +785,7 @@ func fetchOrganizations(enterprise string) ([]string, error) {
 			}
 		}`, enterprise, maxPerPage, formatCursor(cursor))
 
-		response, stderr, err := gh.Exec("api", "graphql", "-f", "query="+query)
+		response, stderr, err := ghExecWithRateLimit("api", "graphql", "-f", "query="+query)
 		if err != nil {
 			pterm.Error.Printf("Failed to fetch organizations for enterprise '%s': %v\n", enterprise, err)
 			pterm.Error.Printf("GraphQL query: %s\n", query)
@@ -680,7 +842,7 @@ type MembershipStatus struct {
 }
 
 func getCurrentUser() (string, error) {
-	userResponse, _, err := gh.Exec("api", "user", "-q", ".login")
+	userResponse, _, err := ghExecWithRateLimit("api", "user", "-q", ".login")
 	if err != nil {
 		return "", err
 	}
@@ -695,7 +857,7 @@ func checkSingleOrganizationMembership(org string) (MembershipStatus, error) {
 	}
 
 	// Use REST API to check membership and role directly
-	userResponse, stderr, err := gh.Exec("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/memberships/%s", org, currentUser))
+	userResponse, stderr, err := ghExecWithRateLimit("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/memberships/%s", org, currentUser))
 	if err != nil {
 		// If we get a 404 or similar error, the user is likely not a member
 		if strings.Contains(stderr.String(), "404") || strings.Contains(stderr.String(), "Not Found") {
@@ -807,7 +969,7 @@ func createSecurityConfiguration(org, name, description string, settings map[str
 	tmpFile.Close()
 
 	// Execute the gh API command
-	response, stderr, err := gh.Exec("api", "--method", "POST", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations", org), "--input", tmpFile.Name())
+	response, stderr, err := ghExecWithRateLimit("api", "--method", "POST", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations", org), "--input", tmpFile.Name())
 	if err != nil {
 		pterm.Error.Printf("Failed to create security configuration for org '%s': %v\n", org, err)
 		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
@@ -845,7 +1007,7 @@ func attachConfigurationToRepos(org string, configID int, scope string) error {
 	}
 	tmpFile.Close()
 
-	_, _, err = gh.Exec("api", "--method", "POST", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d/attach", org, configID), "--input", tmpFile.Name())
+	_, _, err = ghExecWithRateLimit("api", "--method", "POST", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d/attach", org, configID), "--input", tmpFile.Name())
 	return err
 }
 
@@ -872,7 +1034,7 @@ func setConfigurationAsDefault(org string, configID int) error {
 	}
 	tmpFile.Close()
 
-	_, _, err = gh.Exec("api", "--method", "PUT", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d/defaults", org, configID), "--input", tmpFile.Name())
+	_, _, err = ghExecWithRateLimit("api", "--method", "PUT", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d/defaults", org, configID), "--input", tmpFile.Name())
 	return err
 }
 
@@ -899,7 +1061,7 @@ func getConfigNameForModification() (string, error) {
 }
 
 func getSecurityConfigurationDetails(org string, configID int) (*SecurityConfigurationDetails, error) {
-	response, stderr, err := gh.Exec("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d", org, configID))
+	response, stderr, err := ghExecWithRateLimit("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d", org, configID))
 	if err != nil {
 		pterm.Error.Printf("Failed to fetch security configuration details for org '%s': %v\n", org, err)
 		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
@@ -1107,7 +1269,7 @@ func updateSecurityConfiguration(org string, configID int, description string, s
 	tmpFile.Close()
 
 	// Execute the gh API command with PATCH method
-	_, stderr, err := gh.Exec("api", "--method", "PATCH", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d", org, configID), "--input", tmpFile.Name())
+	_, stderr, err := ghExecWithRateLimit("api", "--method", "PATCH", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d", org, configID), "--input", tmpFile.Name())
 	if err != nil {
 		pterm.Error.Printf("Failed to update security configuration %d for org '%s': %v\n", configID, org, err)
 		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
@@ -1176,7 +1338,7 @@ func deleteConfigurationFromOrg(org, configName string) (bool, error) {
 }
 
 func fetchSecurityConfigurations(org string) ([]SecurityConfiguration, error) {
-	response, stderr, err := gh.Exec("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations", org))
+	response, stderr, err := ghExecWithRateLimit("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations", org))
 	if err != nil {
 		pterm.Error.Printf("Failed to fetch security configurations for org '%s': %v\n", org, err)
 		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
@@ -1201,7 +1363,7 @@ func findConfigurationByName(configs []SecurityConfiguration, name string) (int,
 }
 
 func deleteSecurityConfiguration(org string, configID int) error {
-	_, stderr, err := gh.Exec("api", "--method", "DELETE", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d", org, configID))
+	_, stderr, err := ghExecWithRateLimit("api", "--method", "DELETE", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d", org, configID))
 	if err != nil {
 		pterm.Error.Printf("Failed to delete security configuration %d from org '%s': %v\n", configID, org, err)
 		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
