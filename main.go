@@ -49,6 +49,7 @@ var rateLimitHandler = &RateLimitHandler{}
 
 // isRateLimitError checks if an error is due to rate limiting
 // It checks for HTTP status codes 403 or 429 AND x-ratelimit-remaining: 0
+// For GHES environments without rate limit headers, it gracefully handles missing headers
 func isRateLimitError(err error, stderr string) (bool, string) {
 	if err == nil {
 		return false, ""
@@ -65,14 +66,24 @@ func isRateLimitError(err error, stderr string) (bool, string) {
 		return false, ""
 	}
 	
-	// Check for x-ratelimit-remaining: 0 in stderr (gh CLI includes headers in stderr)
-	if strings.Contains(strings.ToLower(stderrStr), "x-ratelimit-remaining: 0") {
-		// Extract x-ratelimit-reset header value if present
-		resetHeader := extractHeaderValue(stderrStr, "x-ratelimit-reset")
-		return true, resetHeader
+	// Check if x-ratelimit-remaining header is present
+	rateLimitRemainingHeader := extractHeaderValue(stderrStr, "x-ratelimit-remaining")
+	
+	// If header is present, check if it's 0
+	if rateLimitRemainingHeader != "" {
+		if rateLimitRemainingHeader == "0" {
+			// Confirmed rate limit: header present and is 0
+			resetHeader := extractHeaderValue(stderrStr, "x-ratelimit-reset")
+			return true, resetHeader
+		}
+		// Header present but not 0, not a rate limit
+		return false, ""
 	}
 	
-	return false, ""
+	// Header not present (GHES without rate limits configured)
+	// Treat 403/429 as potential rate limit for graceful handling
+	resetHeader := extractHeaderValue(stderrStr, "x-ratelimit-reset")
+	return true, resetHeader
 }
 
 // extractHeaderValue extracts a header value from the stderr output
