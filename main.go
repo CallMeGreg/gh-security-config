@@ -83,14 +83,25 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgBlue)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Enterprise Security Configuration Generator")
 	pterm.Println()
 
-	// Get force flag value
-	force, err := cmd.Flags().GetBool("force")
+	// Get org-list flag value
+	orgListPath, err := cmd.Flags().GetString("org-list")
 	if err != nil {
 		return err
 	}
 
-	// Get org-list flag value
-	orgListPath, err := cmd.Flags().GetString("org-list")
+	// Validate CSV file early if provided
+	if orgListPath != "" {
+		orgs, err := readOrganizationsFromCSV(orgListPath)
+		if err != nil {
+			return fmt.Errorf("CSV validation failed: %w", err)
+		}
+		if len(orgs) == 0 {
+			return fmt.Errorf("CSV file contains no valid organizations")
+		}
+	}
+
+	// Get force flag value
+	force, err := cmd.Flags().GetBool("force")
 	if err != nil {
 		return err
 	}
@@ -224,6 +235,17 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Validate CSV file early if provided
+	if orgListPath != "" {
+		orgs, err := readOrganizationsFromCSV(orgListPath)
+		if err != nil {
+			return fmt.Errorf("CSV validation failed: %w", err)
+		}
+		if len(orgs) == 0 {
+			return fmt.Errorf("CSV file contains no valid organizations")
+		}
+	}
+
 	// Get enterprise name
 	enterprise, err := getEnterpriseInput()
 	if err != nil {
@@ -329,6 +351,17 @@ func runModify(cmd *cobra.Command, args []string) error {
 	orgListPath, err := cmd.Flags().GetString("org-list")
 	if err != nil {
 		return err
+	}
+
+	// Validate CSV file early if provided
+	if orgListPath != "" {
+		orgs, err := readOrganizationsFromCSV(orgListPath)
+		if err != nil {
+			return fmt.Errorf("CSV validation failed: %w", err)
+		}
+		if len(orgs) == 0 {
+			return fmt.Errorf("CSV file contains no valid organizations")
+		}
 	}
 
 	// Get enterprise name
