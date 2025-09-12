@@ -44,6 +44,12 @@ Run the interactive security configuration generator:
 gh security-config generate
 ```
 
+To target specific organizations using a CSV file:
+
+```bash
+gh security-config generate --org-list path/to/organizations.csv
+```
+
 The extension will guide you through:
 
 1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
@@ -55,12 +61,35 @@ The extension will guide you through:
 4. **Default Setting**: Optionally set the configuration as default for new repositories
 5. **Confirmation**: Review and confirm the operation before execution
 
+### Organization Targeting
+
+By default, all commands target every organization in the specified enterprise. You can limit the scope using the `--org-list` flag:
+
+- **CSV Format**: Create a CSV file with one organization name per line (no header row required)
+- **Example CSV**: See [example-organizations.csv](example-organizations.csv) for the correct format
+- **Error Handling**: If an organization from the CSV is not found or accessible, the tool will show a warning and continue with other organizations
+
+Example CSV file:
+```
+acme-corp
+tech-solutions
+data-analytics
+security-team
+infrastructure
+```
+
 ### Delete Security Configurations
 
 Run the interactive security configuration deletion:
 
 ```bash
 gh security-config delete
+```
+
+To target specific organizations using a CSV file:
+
+```bash
+gh security-config delete --org-list path/to/organizations.csv
 ```
 
 The extension will guide you through:
@@ -78,6 +107,12 @@ Run the interactive security configuration modification:
 
 ```bash
 gh security-config modify
+```
+
+To target specific organizations using a CSV file:
+
+```bash
+gh security-config modify --org-list path/to/organizations.csv
 ```
 
 The extension will guide you through:

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,6 +64,9 @@ var modifyCmd = &cobra.Command{
 
 func init() {
 	generateCmd.Flags().Bool("force", false, "Force deletion of existing configurations with the same name before creating new ones")
+	generateCmd.Flags().String("org-list", "", "Path to CSV file containing organization names to target (one per line, no header)")
+	deleteCmd.Flags().String("org-list", "", "Path to CSV file containing organization names to target (one per line, no header)")
+	modifyCmd.Flags().String("org-list", "", "Path to CSV file containing organization names to target (one per line, no header)")
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(deleteCmd)
 	rootCmd.AddCommand(modifyCmd)
@@ -78,6 +82,23 @@ func main() {
 func runGenerate(cmd *cobra.Command, args []string) error {
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgBlue)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Enterprise Security Configuration Generator")
 	pterm.Println()
+
+	// Get org-list flag value
+	orgListPath, err := cmd.Flags().GetString("org-list")
+	if err != nil {
+		return err
+	}
+
+	// Validate CSV file early if provided
+	if orgListPath != "" {
+		orgs, err := readOrganizationsFromCSV(orgListPath)
+		if err != nil {
+			return fmt.Errorf("CSV validation failed: %w", err)
+		}
+		if len(orgs) == 0 {
+			return fmt.Errorf("CSV file contains no valid organizations")
+		}
+	}
 
 	// Get force flag value
 	force, err := cmd.Flags().GetBool("force")
@@ -103,19 +124,20 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		pterm.Info.Printf("Using GitHub Enterprise Server: %s\n", serverURL)
 	}
 
-	// Fetch organizations
-	pterm.Info.Println("Fetching organizations from enterprise...")
-	orgs, err := fetchOrganizations(enterprise)
+	// Fetch organizations (from CSV or enterprise API)
+	orgs, err := getOrganizations(enterprise, orgListPath)
 	if err != nil {
 		return err
 	}
 
 	if len(orgs) == 0 {
-		pterm.Warning.Println("No organizations found in the enterprise.")
+		if orgListPath != "" {
+			pterm.Warning.Println("No valid organizations found in the CSV file.")
+		} else {
+			pterm.Warning.Println("No organizations found in the enterprise.")
+		}
 		return nil
 	}
-
-	pterm.Success.Printf("Found %d organizations in enterprise '%s'\n", len(orgs), enterprise)
 
 	// Get security configuration details
 	configName, configDescription, err := getSecurityConfigInput()
@@ -207,6 +229,23 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgRed)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Enterprise Security Configuration Deletion")
 	pterm.Println()
 
+	// Get org-list flag value
+	orgListPath, err := cmd.Flags().GetString("org-list")
+	if err != nil {
+		return err
+	}
+
+	// Validate CSV file early if provided
+	if orgListPath != "" {
+		orgs, err := readOrganizationsFromCSV(orgListPath)
+		if err != nil {
+			return fmt.Errorf("CSV validation failed: %w", err)
+		}
+		if len(orgs) == 0 {
+			return fmt.Errorf("CSV file contains no valid organizations")
+		}
+	}
+
 	// Get enterprise name
 	enterprise, err := getEnterpriseInput()
 	if err != nil {
@@ -225,19 +264,20 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		pterm.Info.Printf("Using GitHub Enterprise Server: %s\n", serverURL)
 	}
 
-	// Fetch organizations
-	pterm.Info.Println("Fetching organizations from enterprise...")
-	orgs, err := fetchOrganizations(enterprise)
+	// Fetch organizations (from CSV or enterprise API)
+	orgs, err := getOrganizations(enterprise, orgListPath)
 	if err != nil {
 		return err
 	}
 
 	if len(orgs) == 0 {
-		pterm.Warning.Println("No organizations found in the enterprise.")
+		if orgListPath != "" {
+			pterm.Warning.Println("No valid organizations found in the CSV file.")
+		} else {
+			pterm.Warning.Println("No organizations found in the enterprise.")
+		}
 		return nil
 	}
-
-	pterm.Success.Printf("Found %d organizations in enterprise '%s'\n", len(orgs), enterprise)
 
 	// Get security configuration name to delete
 	configName, err := getConfigNameForDeletion()
@@ -307,6 +347,23 @@ func runModify(cmd *cobra.Command, args []string) error {
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgMagenta)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Enterprise Security Configuration Modification")
 	pterm.Println()
 
+	// Get org-list flag value
+	orgListPath, err := cmd.Flags().GetString("org-list")
+	if err != nil {
+		return err
+	}
+
+	// Validate CSV file early if provided
+	if orgListPath != "" {
+		orgs, err := readOrganizationsFromCSV(orgListPath)
+		if err != nil {
+			return fmt.Errorf("CSV validation failed: %w", err)
+		}
+		if len(orgs) == 0 {
+			return fmt.Errorf("CSV file contains no valid organizations")
+		}
+	}
+
 	// Get enterprise name
 	enterprise, err := getEnterpriseInput()
 	if err != nil {
@@ -325,19 +382,20 @@ func runModify(cmd *cobra.Command, args []string) error {
 		pterm.Info.Printf("Using GitHub Enterprise Server: %s\n", serverURL)
 	}
 
-	// Fetch organizations
-	pterm.Info.Println("Fetching organizations from enterprise...")
-	orgs, err := fetchOrganizations(enterprise)
+	// Fetch organizations (from CSV or enterprise API)
+	orgs, err := getOrganizations(enterprise, orgListPath)
 	if err != nil {
 		return err
 	}
 
 	if len(orgs) == 0 {
-		pterm.Warning.Println("No organizations found in the enterprise.")
+		if orgListPath != "" {
+			pterm.Warning.Println("No valid organizations found in the CSV file.")
+		} else {
+			pterm.Warning.Println("No organizations found in the enterprise.")
+		}
 		return nil
 	}
-
-	pterm.Success.Printf("Found %d organizations in enterprise '%s'\n", len(orgs), enterprise)
 
 	// Get security configuration name to modify
 	configName, err := getConfigNameForModification()
@@ -670,6 +728,117 @@ func formatCursor(cursor *string) string {
 		return "null"
 	}
 	return fmt.Sprintf(`"%s"`, *cursor)
+}
+
+// readOrganizationsFromCSV reads organization names from a CSV file
+func readOrganizationsFromCSV(filePath string) ([]string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open CSV file: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CSV file: %w", err)
+	}
+
+	var orgs []string
+	for i, record := range records {
+		if len(record) == 0 {
+			continue // Skip empty lines
+		}
+		orgName := strings.TrimSpace(record[0])
+		if orgName == "" {
+			continue // Skip empty organization names
+		}
+		// Basic validation for organization name format
+		if strings.Contains(orgName, " ") || strings.Contains(orgName, "/") {
+			pterm.Warning.Printf("Line %d: Invalid organization name format '%s', skipping\n", i+1, orgName)
+			continue
+		}
+		orgs = append(orgs, orgName)
+	}
+
+	return orgs, nil
+}
+
+// getOrganizations returns organization list either from CSV file or from enterprise API
+func getOrganizations(enterprise, orgListPath string) ([]string, error) {
+	if orgListPath != "" {
+		pterm.Info.Printf("Reading organizations from CSV file: %s\n", orgListPath)
+		csvOrgs, err := readOrganizationsFromCSV(orgListPath)
+		if err != nil {
+			return nil, err
+		}
+		if len(csvOrgs) == 0 {
+			return nil, fmt.Errorf("no valid organizations found in CSV file")
+		}
+		pterm.Success.Printf("Found %d organizations in CSV file\n", len(csvOrgs))
+
+		// Fetch all organizations from enterprise to validate against
+		pterm.Info.Println("Fetching organizations from enterprise to validate CSV list...")
+		enterpriseOrgs, err := fetchOrganizations(enterprise)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch enterprise organizations for validation: %w", err)
+		}
+		pterm.Success.Printf("Found %d organizations in enterprise '%s'\n", len(enterpriseOrgs), enterprise)
+
+		// Create a map for faster lookup
+		enterpriseOrgMap := make(map[string]bool)
+		for _, org := range enterpriseOrgs {
+			enterpriseOrgMap[org] = true
+		}
+
+		// Validate CSV organizations against enterprise organizations
+		var validOrgs []string
+		var invalidOrgs []string
+
+		for _, org := range csvOrgs {
+			if enterpriseOrgMap[org] {
+				validOrgs = append(validOrgs, org)
+			} else {
+				invalidOrgs = append(invalidOrgs, org)
+			}
+		}
+
+		// Warn about invalid organizations
+		if len(invalidOrgs) > 0 {
+			pterm.Warning.Printf("Found %d organizations in CSV that do not exist in enterprise '%s':\n", len(invalidOrgs), enterprise)
+			for _, org := range invalidOrgs {
+				pterm.Printf("  - %s (not found in enterprise)\n", pterm.Red(org))
+			}
+			pterm.Println()
+		}
+
+		// Check if we have any valid organizations left
+		if len(validOrgs) == 0 {
+			return nil, fmt.Errorf("no valid organizations found in CSV file that exist in enterprise '%s'", enterprise)
+		}
+
+		if len(invalidOrgs) > 0 {
+			pterm.Info.Printf("Proceeding with %d valid organizations (skipping %d invalid)\n", len(validOrgs), len(invalidOrgs))
+		}
+
+		// Show the list of valid organizations that will be targeted
+		pterm.Info.Println("Valid organizations to be targeted:")
+		for _, org := range validOrgs {
+			pterm.Printf("  - %s\n", pterm.Green(org))
+		}
+		pterm.Println()
+
+		return validOrgs, nil
+	}
+
+	// Use existing enterprise API fetching
+	pterm.Info.Println("Fetching organizations from enterprise...")
+	orgs, err := fetchOrganizations(enterprise)
+	if err != nil {
+		return nil, err
+	}
+	pterm.Success.Printf("Found %d organizations in enterprise '%s'\n", len(orgs), enterprise)
+	return orgs, nil
 }
 
 // MembershipStatus represents the user's membership status in an organization
