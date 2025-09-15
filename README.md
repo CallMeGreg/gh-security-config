@@ -197,7 +197,7 @@ The extension will guide you through:
 4. **Settings Update**: Interactively update each security setting with options to keep current values
 5. **Confirmation**: Review the changes and confirm modification before execution
 
-> [!INFO]
+> [!NOTE]
 > The modify operation will update the specified security configuration across ALL organizations in the enterprise where it exists. Organizations without the configuration will be skipped.
 
 ## Features
