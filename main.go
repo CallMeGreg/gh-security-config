@@ -44,7 +44,7 @@ var rootCmd = &cobra.Command{
 var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate and apply security configurations across enterprise organizations",
-	Long:  "Interactive command to create security configurations and apply them to organizations in an enterprise",
+	Long:  "Interactive command to create security configurations and apply them to organizations in an enterprise. Optionally copy an existing configuration from another organization using --copy-from-org.",
 	RunE:  runGenerate,
 }
 
@@ -153,6 +153,23 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 	// Check if we should copy from an existing organization
 	if copyFromOrg != "" {
+		// Filter out the source organization from target organizations to avoid copying to itself
+		var filteredOrgs []string
+		for _, org := range orgs {
+			if org != copyFromOrg {
+				filteredOrgs = append(filteredOrgs, org)
+			}
+		}
+		
+		if len(filteredOrgs) == 0 {
+			return fmt.Errorf("no target organizations available after excluding source organization '%s'", copyFromOrg)
+		}
+		
+		if len(filteredOrgs) < len(orgs) {
+			pterm.Info.Printf("Excluding source organization '%s' from targets. Will process %d organizations.\n", copyFromOrg, len(filteredOrgs))
+			orgs = filteredOrgs
+		}
+		
 		// Copy configuration logic
 		configName, configDescription, settings, scope, setAsDefault, err = handleCopyFromOrg(copyFromOrg)
 		if err != nil {
