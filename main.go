@@ -65,6 +65,7 @@ var modifyCmd = &cobra.Command{
 func init() {
 	generateCmd.Flags().Bool("force", false, "Force deletion of existing configurations with the same name before creating new ones")
 	generateCmd.Flags().String("org-list", "", "Path to CSV file containing organization names to target (one per line, no header)")
+	generateCmd.Flags().String("copy-from-org", "", "Organization name to copy an existing configuration from")
 	deleteCmd.Flags().String("org-list", "", "Path to CSV file containing organization names to target (one per line, no header)")
 	modifyCmd.Flags().String("org-list", "", "Path to CSV file containing organization names to target (one per line, no header)")
 	rootCmd.AddCommand(generateCmd)
@@ -106,6 +107,12 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Get copy-from-org flag value
+	copyFromOrg, err := cmd.Flags().GetString("copy-from-org")
+	if err != nil {
+		return err
+	}
+
 	// Get enterprise name
 	enterprise, err := getEnterpriseInput()
 	if err != nil {
@@ -139,28 +146,43 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Get security configuration details
-	configName, configDescription, err := getSecurityConfigInput()
-	if err != nil {
-		return err
-	}
+	var configName, configDescription string
+	var settings map[string]interface{}
+	var scope string
+	var setAsDefault bool
 
-	// Get security settings
-	settings, err := getSecuritySettings()
-	if err != nil {
-		return err
-	}
+	// Check if we should copy from an existing organization
+	if copyFromOrg != "" {
+		// Copy configuration logic
+		configName, configDescription, settings, scope, setAsDefault, err = handleCopyFromOrg(copyFromOrg)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Original logic for creating new configuration
+		// Get security configuration details
+		configName, configDescription, err = getSecurityConfigInput()
+		if err != nil {
+			return err
+		}
 
-	// Get attachment scope
-	scope, err := getAttachmentScope()
-	if err != nil {
-		return err
-	}
+		// Get security settings
+		settings, err = getSecuritySettings()
+		if err != nil {
+			return err
+		}
 
-	// Ask about setting as default
-	setAsDefault, err := getDefaultSetting()
-	if err != nil {
-		return err
+		// Get attachment scope
+		scope, err = getAttachmentScope()
+		if err != nil {
+			return err
+		}
+
+		// Ask about setting as default
+		setAsDefault, err = getDefaultSetting()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Confirm before proceeding
@@ -1358,6 +1380,77 @@ func fetchSecurityConfigurations(org string) ([]SecurityConfiguration, error) {
 	}
 
 	return configs, nil
+}
+
+// handleCopyFromOrg handles the logic for copying a configuration from an existing organization
+func handleCopyFromOrg(copyFromOrg string) (string, string, map[string]interface{}, string, bool, error) {
+	pterm.Info.Printf("Fetching security configurations from organization '%s'...\n", copyFromOrg)
+	
+	// Check if user has access to the source organization
+	status, err := checkSingleOrganizationMembership(copyFromOrg)
+	if err != nil {
+		return "", "", nil, "", false, fmt.Errorf("failed to check membership for organization '%s': %w", copyFromOrg, err)
+	}
+	if !status.IsMember {
+		return "", "", nil, "", false, fmt.Errorf("you are not a member of organization '%s'", copyFromOrg)
+	}
+	if !status.IsOwner {
+		return "", "", nil, "", false, fmt.Errorf("you are a member but not an owner of organization '%s'", copyFromOrg)
+	}
+
+	// Fetch security configurations from the source organization
+	configs, err := fetchSecurityConfigurations(copyFromOrg)
+	if err != nil {
+		return "", "", nil, "", false, fmt.Errorf("failed to fetch security configurations from organization '%s': %w", copyFromOrg, err)
+	}
+
+	if len(configs) == 0 {
+		return "", "", nil, "", false, fmt.Errorf("no security configurations found in organization '%s'", copyFromOrg)
+	}
+
+	// Present configurations for selection
+	var configOptions []string
+	configMap := make(map[string]SecurityConfiguration)
+	for _, config := range configs {
+		displayName := fmt.Sprintf("%s - %s", config.Name, config.Description)
+		configOptions = append(configOptions, displayName)
+		configMap[displayName] = config
+	}
+
+	selectedConfig, err := pterm.DefaultInteractiveSelect.WithOptions(configOptions).Show("Select a configuration to copy")
+	if err != nil {
+		return "", "", nil, "", false, err
+	}
+
+	// Get the selected configuration details
+	selectedConfigData := configMap[selectedConfig]
+	
+	// Get detailed configuration including settings
+	configDetails, err := getSecurityConfigurationDetails(copyFromOrg, selectedConfigData.ID)
+	if err != nil {
+		return "", "", nil, "", false, fmt.Errorf("failed to fetch configuration details: %w", err)
+	}
+
+	pterm.Success.Printf("Selected configuration '%s' from organization '%s'\n", selectedConfigData.Name, copyFromOrg)
+	
+	// Display current settings
+	pterm.Info.Println("Configuration details that will be copied:")
+	displayCurrentSettings(configDetails.Settings, configDetails.Description)
+	pterm.Println()
+
+	// Ask for attachment scope (this might be different for target organizations)
+	scope, err := getAttachmentScope()
+	if err != nil {
+		return "", "", nil, "", false, err
+	}
+
+	// Ask about setting as default (this might be different for target organizations)
+	setAsDefault, err := getDefaultSetting()
+	if err != nil {
+		return "", "", nil, "", false, err
+	}
+
+	return selectedConfigData.Name, configDetails.Description, configDetails.Settings, scope, setAsDefault, nil
 }
 
 func findConfigurationByName(configs []SecurityConfiguration, name string) (int, bool) {
