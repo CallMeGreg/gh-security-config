@@ -50,16 +50,29 @@ To target specific organizations using a CSV file:
 gh security-config generate --org-list path/to/organizations.csv
 ```
 
+To copy an existing security configuration from another organization:
+
+```bash
+gh security-config generate --copy-from-org <ORG_NAME>
+```
+
+You can also combine the copy functionality with organization targeting:
+
+```bash
+gh security-config generate --copy-from-org <ORG_NAME> --org-list path/to/organizations.csv
+```
+
 The extension will guide you through:
 
 1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
-2. **Security Configuration**: Define the name, description, and security settings for your configuration
-3. **Repository Scope**: Choose which repositories to apply the configuration to:
+2. **Configuration Source**: Choose to either create a new configuration or copy from an existing organization (when using `--copy-from-org`)
+3. **Security Configuration**: Define the name, description, and security settings for your configuration (or select from existing configurations when copying)
+4. **Repository Scope**: Choose which repositories to apply the configuration to:
    - `all` - All repositories
    - `public` - Public repositories only
    - `private_or_internal` - Private and internal repositories only
-4. **Default Setting**: Optionally set the configuration as default for new repositories
-5. **Confirmation**: Review and confirm the operation before execution
+5. **Default Setting**: Optionally set the configuration as default for new repositories
+6. **Confirmation**: Review and confirm the operation before execution
 
 ### Organization Targeting
 
@@ -69,14 +82,23 @@ By default, all commands target every organization in the specified enterprise. 
 - **Example CSV**: See [example-organizations.csv](example-organizations.csv) for the correct format
 - **Error Handling**: If an organization from the CSV is not found or accessible, the tool will show a warning and continue with other organizations
 
-Example CSV file:
-```
-acme-corp
-tech-solutions
-data-analytics
-security-team
-infrastructure
-```
+### Copying Security Configurations
+
+The `--copy-from-org` flag allows you to copy an existing security configuration from one organization and apply it to other organizations in your enterprise. This is useful for:
+
+- **Standardizing configurations**: Copy a well-tested configuration across multiple organizations
+- **Quick setup**: Avoid recreating similar configurations from scratch
+- **Configuration migration**: Move configurations between organizations
+
+#### How it works:
+
+1. **Source Organization Access**: You must be an owner of the source organization to copy configurations
+2. **Configuration Selection**: Choose from available security configurations in the source organization
+3. **Settings Review**: Review the configuration details that will be copied
+4. **Target Filtering**: The source organization is automatically excluded from target organizations to prevent self-copying
+
+> [!NOTE]
+> When using `--copy-from-org`, you can still customize the repository attachment scope and default setting for the target organizations, even though the security settings themselves are copied from the source.
 
 ### Delete Security Configurations
 
@@ -137,6 +159,7 @@ The extension will guide you through:
   - Enforcement
 - 🎯 **Flexible Targeting**: Choose which repositories to apply configurations to
 - ➕ **Configuration Generation**: Create and apply security configurations across all enterprise organizations
+- 📋 **Configuration Copying**: Copy existing security configurations from one organization to others in the enterprise
 - ✏️ **Configuration Modification**: Update existing security configurations across all enterprise organizations with selective setting changes
 - ❌ **Configuration Deletion**: Safely delete security configurations from all enterprise organizations with confirmation prompts
 - ⚙️ **Default Configuration**: Optionally set configurations as defaults for new repositories
@@ -178,15 +201,14 @@ go build -o gh-security-config
 To run the extension locally:
 
 ```bash
-./gh-security-config generate
+./gh-security-config --help
 ```
 
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+2. Make your changes
+3. Submit a pull request
 
 ## License
 
