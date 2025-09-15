@@ -3,15 +3,12 @@
 A GitHub CLI extension to create and apply security configurations across many organizations in a GitHub Enterprise.
 
 > [!NOTE]
-> This extension currently only supports configuring GitHub Advanced Security and Secret Scanning features as part of a security configuration.
-
-> [!TIP]
-> For GitHub Enterprise Server 3.16+ and GitHub Enterprise Cloud it's recommended to use [Enterprise Security Configurations](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-code-security/securing-your-enterprise/about-security-configurations) instead of this solution.
+> This extension is intended for GHES 3.15 and currently only supports configuring GitHub Advanced Security and Secret Scanning features as part of a security configuration. For GitHub Enterprise Server 3.16+ and GitHub Enterprise Cloud it's recommended to use [Enterprise Security Configurations](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-code-security/securing-your-enterprise/about-security-configurations) instead of this solution.
 
 ## Pre-requisites
 
-1. For [GitHub Advanced Security](https://docs.github.com/en/enterprise-cloud@latest/get-started/learning-about-github/about-github-advanced-security) features, your organizations need appropriate licensing.
-2. Install the GitHub CLI: https://github.com/cli/cli#installation
+1. [GitHub Advanced Security](https://docs.github.com/en/enterprise-cloud@latest/get-started/learning-about-github/about-github-advanced-security) licenses and availability in your organizations.
+2. [GitHub CLI](https://github.com/cli/cli#installation)
 3. Confirm that you are authenticated with an account that has access to the enterprise and organizations you would like to interact with. You can check your authentication status by running:
 
 ```
@@ -36,43 +33,40 @@ gh extension install CallMeGreg/gh-security-config
 
 ## Usage
 
-### Generate Security Configurations
+The extension provides three main commands for managing security configurations across enterprise organizations:
 
-Run the interactive security configuration generator:
+### Commands
+
+- **`generate`** - Create and apply new security configurations across organizations
+- **`delete`** - Remove existing security configurations from organizations  
+- **`modify`** - Update existing security configurations across organizations
+
+### Persistent Flags
+
+These flags are available on all commands:
+
+- **`--org-list string`** - Path to CSV file containing organization names to target (one per line, no header)
+- **`--concurrency int`** - Number of concurrent requests (1-20, default: 1)
+
+### Generate Command Flags
+
+The `generate` command has additional flags:
+
+- **`--copy-from-org string`** - Organization name to copy an existing configuration from
+- **`--force`** - Force deletion of existing configurations with the same name before creating new ones
+
+### Basic Usage Examples
 
 ```bash
+# Create a new security configuration interactively
 gh security-config generate
+
+# Delete a security configuration from specific organizations
+gh security-config delete --org-list organizations.csv
+
+# Modify configurations with concurrent processing
+gh security-config modify --concurrency 5
 ```
-
-To target specific organizations using a CSV file:
-
-```bash
-gh security-config generate --org-list path/to/organizations.csv
-```
-
-To copy an existing security configuration from another organization:
-
-```bash
-gh security-config generate --copy-from-org <ORG_NAME>
-```
-
-You can also combine the copy functionality with organization targeting and concurrency:
-
-```bash
-gh security-config generate --copy-from-org <ORG_NAME> --org-list path/to/organizations.csv --concurrency 5
-```
-
-The extension will guide you through:
-
-1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
-2. **Configuration Source**: Choose to either create a new configuration or copy from an existing organization (when using `--copy-from-org`)
-3. **Security Configuration**: Define the name, description, and security settings for your configuration (or select from existing configurations when copying)
-4. **Repository Scope**: Choose which repositories to apply the configuration to:
-   - `all` - All repositories
-   - `public` - Public repositories only
-   - `private_or_internal` - Private and internal repositories only
-5. **Default Setting**: Optionally set the configuration as default for new repositories
-6. **Confirmation**: Review and confirm the operation before execution
 
 ### Organization Targeting
 
@@ -99,6 +93,22 @@ The `--copy-from-org` flag allows you to copy an existing security configuration
 
 > [!NOTE]
 > When using `--copy-from-org`, you can still customize the repository attachment scope and default setting for the target organizations, even though the security settings themselves are copied from the source.
+
+### Interactive Workflow
+
+All commands provide an interactive workflow that guides you through:
+
+1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
+2. **Configuration Details**: Define or select security configurations based on the command:
+   - **Generate**: Create new configurations or copy from existing organizations
+   - **Delete**: Specify configuration name to remove
+   - **Modify**: Select configuration and update settings
+3. **Repository Scope**: Choose which repositories to apply configurations to (generate only):
+   - `all` - All repositories
+   - `public` - Public repositories only
+   - `private_or_internal` - Private and internal repositories only
+4. **Default Setting**: Optionally set configurations as default for new repositories (generate only)
+5. **Confirmation**: Review and confirm the operation before execution
 
 ### Concurrency and Performance
 
@@ -128,20 +138,7 @@ gh security-config delete --concurrency 20 --org-list organizations.csv
 - **Progress Tracking**: Real-time progress updates work seamlessly with concurrent processing
 
 > [!WARNING]
-> **Rate Limiting Considerations**: Setting concurrency higher than 1 increases the likelihood of encountering GitHub's secondary rate limits. To avoid rate limiting issues, consider exempting the user from rate limits.
-
-#### Example Usage
-
-```bash
-# Conservative approach - sequential processing
-gh security-config generate --org-list large-org-list.csv
-
-# Moderate concurrency for faster processing
-gh security-config modify --concurrency 3 --org-list organizations.csv
-
-# High concurrency (use only if rate limit exempt)
-gh security-config delete --concurrency 10 --org-list organizations.csv
-```
+> **Rate Limiting Considerations**: Setting concurrency higher than 1 increases the likelihood of encountering GitHub's secondary rate limits. To avoid rate limiting issues, consider [exempting the user from rate limits](https://docs.github.com/en/enterprise-server@3.15/admin/administering-your-instance/administering-your-instance-from-the-command-line/command-line-utilities#ghe-config).
 
 ### Delete Security Configurations
 
@@ -220,7 +217,6 @@ The extension will guide you through:
 - ❌ **Configuration Deletion**: Safely delete security configurations from all enterprise organizations with confirmation prompts
 - ⚙️ **Default Configuration**: Optionally set configurations as defaults for new repositories
 - 📊 **Progress Tracking**: Visual progress indicators with concurrent operation support
-- 🖥️ **GitHub Enterprise Server Support**: Works with both GitHub.com and GitHub Enterprise Server
 
 ## Security Settings
 
@@ -244,7 +240,7 @@ When attaching configurations to repositories, you can choose:
 
 ## Example
 
-![Demo of gh-security-config generate](images/gh-security-config-demo.gif)
+![Demo of gh-security-config generate](docs/gh-security-config-demo.gif)
 
 ## Development
 
