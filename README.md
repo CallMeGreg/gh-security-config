@@ -7,8 +7,8 @@ A GitHub CLI extension to create and apply security configurations across many o
 
 ## Pre-requisites
 
-1. [GitHub Advanced Security](https://docs.github.com/en/enterprise-cloud@latest/get-started/learning-about-github/about-github-advanced-security) licenses and availability in your organizations.
-2. [GitHub CLI](https://github.com/cli/cli#installation)
+1. [GitHub CLI](https://github.com/cli/cli#installation)
+2. [GitHub Advanced Security](https://docs.github.com/en/enterprise-cloud@latest/get-started/learning-about-github/about-github-advanced-security) licenses and availability in your organizations.
 3. Confirm that you are authenticated with an account that has access to the enterprise and organizations you would like to interact with. You can check your authentication status by running:
 
 ```
@@ -61,11 +61,11 @@ The `generate` command has additional flags:
 # Create a new security configuration interactively
 gh security-config generate
 
-# Delete a security configuration from specific organizations
-gh security-config delete --org-list organizations.csv
+# Delete a security configuration interactively
+gh security-config delete
 
-# Modify configurations with concurrent processing
-gh security-config modify --concurrency 5
+# Modify a security configuration interactively
+gh security-config modify
 ```
 
 ### Organization Targeting
@@ -112,18 +112,7 @@ All commands provide an interactive workflow that guides you through:
 
 ### Concurrency and Performance
 
-All commands support concurrent requests using the `--concurrency` flag to improve performance when working with many organizations:
-
-```bash
-# Process organizations sequentially (default)
-gh security-config generate
-
-# Process up to 5 organizations concurrently
-gh security-config generate --concurrency 5
-
-# Use maximum concurrency for fastest processing
-gh security-config delete --concurrency 20 --org-list organizations.csv
-```
+All commands support concurrent requests using the `--concurrency` flag to improve performance when working with many organizations.
 
 #### Concurrency Settings
 
@@ -200,24 +189,6 @@ The extension will guide you through:
 > [!NOTE]
 > The modify operation will update the specified security configuration across ALL organizations in the enterprise where it exists. Organizations without the configuration will be skipped.
 
-## Features
-
-- 🏢 **Enterprise-wide Management**: Automatically discovers and processes all organizations in your enterprise
-- ⚡ **Concurrent Processing**: Configurable concurrency (1-20) for faster processing of many organizations
-- 🔒 **Comprehensive Security Settings**: Configure GitHub Advanced Security features and related settings:
-  - GitHub Advanced Security
-  - Secret Scanning
-  - Secret Scanning Push Protection
-  - Secret Scanning Non-Provider Patterns
-  - Enforcement
-- 🎯 **Flexible Targeting**: Choose which repositories to apply configurations to
-- ➕ **Configuration Generation**: Create and apply security configurations across all enterprise organizations
-- 📋 **Configuration Copying**: Copy existing security configurations from one organization to others in the enterprise
-- ✏️ **Configuration Modification**: Update existing security configurations across all enterprise organizations with selective setting changes
-- ❌ **Configuration Deletion**: Safely delete security configurations from all enterprise organizations with confirmation prompts
-- ⚙️ **Default Configuration**: Optionally set configurations as defaults for new repositories
-- 📊 **Progress Tracking**: Visual progress indicators with concurrent operation support
-
 ## Security Settings
 
 The extension allows you to set the following features within the security configuration:
@@ -238,7 +209,7 @@ When attaching configurations to repositories, you can choose:
 - **public**: Apply only to public repositories
 - **private_or_internal**: Apply only to private and internal repositories
 
-## Example
+## Demo
 
 ![Demo of gh-security-config generate](docs/gh-security-config-demo.gif)
 
