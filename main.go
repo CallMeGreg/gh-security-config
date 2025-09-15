@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/cli/go-gh/v2"
 	"github.com/pterm/pterm"
@@ -33,6 +34,229 @@ type ConfigurationExistsError struct {
 
 func (e *ConfigurationExistsError) Error() string {
 	return fmt.Sprintf("configuration '%s' already exists in organization '%s'", e.ConfigName, e.OrgName)
+}
+
+// validateConcurrency validates the concurrency flag value
+func validateConcurrency(concurrency int) error {
+	if concurrency < 1 || concurrency > 20 {
+		return fmt.Errorf("concurrency must be between 1 and 20, got %d", concurrency)
+	}
+	return nil
+}
+
+// ProcessingResult represents the result of processing a single organization
+type ProcessingResult struct {
+	Organization string
+	Success      bool
+	Skipped      bool
+	Error        error
+}
+
+// OrganizationProcessor defines the interface for processing organizations
+type OrganizationProcessor interface {
+	ProcessOrganization(org string) ProcessingResult
+}
+
+// ConcurrentProcessor handles concurrent organization processing
+type ConcurrentProcessor struct {
+	organizations []string
+	processor     OrganizationProcessor
+	concurrency   int
+	progressBar   *pterm.ProgressbarPrinter
+	mu            sync.Mutex
+	successCount  int
+	skippedCount  int
+	errorCount    int
+}
+
+// NewConcurrentProcessor creates a new concurrent processor
+func NewConcurrentProcessor(organizations []string, processor OrganizationProcessor, concurrency int) *ConcurrentProcessor {
+	return &ConcurrentProcessor{
+		organizations: organizations,
+		processor:     processor,
+		concurrency:   concurrency,
+	}
+}
+
+// Process executes the organization processing with the specified concurrency
+func (cp *ConcurrentProcessor) Process() (successCount, skippedCount, errorCount int) {
+	totalOrgs := len(cp.organizations)
+	if totalOrgs == 0 {
+		return 0, 0, 0
+	}
+
+	// Create progress bar
+	progressBar, _ := pterm.DefaultProgressbar.WithTotal(totalOrgs).WithTitle("Processing organizations").Start()
+	cp.progressBar = progressBar
+
+	// Create channels for work distribution and result collection
+	orgChan := make(chan string, totalOrgs)
+	resultChan := make(chan ProcessingResult, totalOrgs)
+
+	// Send all organizations to the work channel
+	for _, org := range cp.organizations {
+		orgChan <- org
+	}
+	close(orgChan)
+
+	// Start workers
+	var wg sync.WaitGroup
+	for i := 0; i < cp.concurrency; i++ {
+		wg.Add(1)
+		go cp.worker(&wg, orgChan, resultChan)
+	}
+
+	// Wait for all workers to complete
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect results
+	for result := range resultChan {
+		cp.mu.Lock()
+		cp.progressBar.UpdateTitle(fmt.Sprintf("Processed %s", result.Organization))
+
+		if result.Success {
+			cp.successCount++
+			pterm.Success.Printf("Successfully processed organization '%s'\n", result.Organization)
+		} else if result.Skipped {
+			cp.skippedCount++
+			// Skipped message should already be printed by the processor
+		} else if result.Error != nil {
+			cp.errorCount++
+			// Check if this is a "configuration exists" error
+			var configExistsErr *ConfigurationExistsError
+			if errors.As(result.Error, &configExistsErr) {
+				pterm.Warning.Printf("Configuration '%s' already exists in organization '%s', skipping\n", configExistsErr.ConfigName, result.Organization)
+				cp.skippedCount++
+				cp.errorCount-- // Don't count this as an error
+			} else {
+				pterm.Error.Printf("Failed to process organization '%s': %v\n", result.Organization, result.Error)
+			}
+		}
+
+		cp.progressBar.Increment()
+		cp.mu.Unlock()
+	}
+
+	progressBar.Stop()
+	return cp.successCount, cp.skippedCount, cp.errorCount
+}
+
+// worker processes organizations from the channel
+func (cp *ConcurrentProcessor) worker(wg *sync.WaitGroup, orgChan <-chan string, resultChan chan<- ProcessingResult) {
+	defer wg.Done()
+
+	for org := range orgChan {
+		result := cp.processor.ProcessOrganization(org)
+		resultChan <- result
+	}
+}
+
+// GenerateProcessor implements OrganizationProcessor for the generate command
+type GenerateProcessor struct {
+	configName        string
+	configDescription string
+	settings          map[string]interface{}
+	scope             string
+	setAsDefault      bool
+	force             bool
+}
+
+// ProcessOrganization processes a single organization for the generate command
+func (gp *GenerateProcessor) ProcessOrganization(org string) ProcessingResult {
+	// Check membership for this specific organization
+	status, err := checkSingleOrganizationMembership(org)
+	if err != nil {
+		pterm.Warning.Printf("Failed to check membership for organization '%s': %v, skipping\n", org, err)
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+	if !status.IsMember {
+		pterm.Warning.Printf("Skipping organization '%s': You are not a member\n", org)
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+	if !status.IsOwner {
+		pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+
+	err = processOrganization(org, gp.configName, gp.configDescription, gp.settings, gp.scope, gp.setAsDefault, gp.force)
+	if err != nil {
+		return ProcessingResult{Organization: org, Error: err}
+	}
+
+	return ProcessingResult{Organization: org, Success: true}
+}
+
+// DeleteProcessor implements OrganizationProcessor for the delete command
+type DeleteProcessor struct {
+	configName string
+}
+
+// ProcessOrganization processes a single organization for the delete command
+func (dp *DeleteProcessor) ProcessOrganization(org string) ProcessingResult {
+	// Check membership for this specific organization
+	status, err := checkSingleOrganizationMembership(org)
+	if err != nil {
+		pterm.Warning.Printf("Failed to check membership for organization '%s': %v, skipping\n", org, err)
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+	if !status.IsMember {
+		pterm.Warning.Printf("Skipping organization '%s': You are not a member\n", org)
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+	if !status.IsOwner {
+		pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+
+	deleted, err := deleteConfigurationFromOrg(org, dp.configName)
+	if err != nil {
+		return ProcessingResult{Organization: org, Error: err}
+	}
+	if !deleted {
+		// Configuration was not found, already logged as warning in deleteConfigurationFromOrg
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+
+	return ProcessingResult{Organization: org, Success: true}
+}
+
+// ModifyProcessor implements OrganizationProcessor for the modify command
+type ModifyProcessor struct {
+	configName     string
+	newDescription string
+	newSettings    map[string]interface{}
+}
+
+// ProcessOrganization processes a single organization for the modify command
+func (mp *ModifyProcessor) ProcessOrganization(org string) ProcessingResult {
+	// Check membership for this specific organization
+	status, err := checkSingleOrganizationMembership(org)
+	if err != nil {
+		pterm.Warning.Printf("Failed to check membership for organization '%s': %v, skipping\n", org, err)
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+	if !status.IsMember {
+		pterm.Warning.Printf("Skipping organization '%s': You are not a member\n", org)
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+	if !status.IsOwner {
+		pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+
+	updated, err := modifyConfigurationInOrg(org, mp.configName, mp.newDescription, mp.newSettings)
+	if err != nil {
+		return ProcessingResult{Organization: org, Error: err}
+	}
+	if !updated {
+		// Configuration was not found, already logged as warning in modifyConfigurationInOrg
+		return ProcessingResult{Organization: org, Skipped: true}
+	}
+
+	return ProcessingResult{Organization: org, Success: true}
 }
 
 var rootCmd = &cobra.Command{
@@ -66,8 +290,11 @@ func init() {
 	generateCmd.Flags().Bool("force", false, "Force deletion of existing configurations with the same name before creating new ones")
 	generateCmd.Flags().String("org-list", "", "Path to CSV file containing organization names to target (one per line, no header)")
 	generateCmd.Flags().String("copy-from-org", "", "Organization name to copy an existing configuration from")
+	generateCmd.Flags().Int("concurrency", 1, "Number of concurrent requests (1-20, default: 1)")
 	deleteCmd.Flags().String("org-list", "", "Path to CSV file containing organization names to target (one per line, no header)")
+	deleteCmd.Flags().Int("concurrency", 1, "Number of concurrent requests (1-20, default: 1)")
 	modifyCmd.Flags().String("org-list", "", "Path to CSV file containing organization names to target (one per line, no header)")
+	modifyCmd.Flags().Int("concurrency", 1, "Number of concurrent requests (1-20, default: 1)")
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(deleteCmd)
 	rootCmd.AddCommand(modifyCmd)
@@ -110,6 +337,17 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	// Get copy-from-org flag value
 	copyFromOrg, err := cmd.Flags().GetString("copy-from-org")
 	if err != nil {
+		return err
+	}
+
+	// Get concurrency flag value
+	concurrency, err := cmd.Flags().GetInt("concurrency")
+	if err != nil {
+		return err
+	}
+
+	// Validate concurrency
+	if err := validateConcurrency(concurrency); err != nil {
 		return err
 	}
 
@@ -160,16 +398,16 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 				filteredOrgs = append(filteredOrgs, org)
 			}
 		}
-		
+
 		if len(filteredOrgs) == 0 {
 			return fmt.Errorf("no target organizations available after excluding source organization '%s'", copyFromOrg)
 		}
-		
+
 		if len(filteredOrgs) < len(orgs) {
 			pterm.Info.Printf("Excluding source organization '%s' from targets. Will process %d organizations.\n", copyFromOrg, len(filteredOrgs))
 			orgs = filteredOrgs
 		}
-		
+
 		// Copy configuration logic
 		configName, configDescription, settings, scope, setAsDefault, err = handleCopyFromOrg(copyFromOrg)
 		if err != nil {
@@ -214,50 +452,21 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Process each organization
-	pterm.Info.Printf("Processing %d organizations...\n", len(orgs))
+	pterm.Info.Printf("Processing %d organizations with concurrency %d...\n", len(orgs), concurrency)
 
-	progressbar, _ := pterm.DefaultProgressbar.WithTotal(len(orgs)).WithTitle("Processing organizations").Start()
-
-	successCount := 0
-	skippedCount := 0
-	errorCount := 0
-
-	for _, org := range orgs {
-		progressbar.UpdateTitle(fmt.Sprintf("Processing %s", org))
-
-		// Check membership for this specific organization
-		status, err := checkSingleOrganizationMembership(org)
-		if err != nil {
-			pterm.Warning.Printf("Failed to check membership for organization '%s': %v, skipping\n", org, err)
-			skippedCount++
-		} else if !status.IsMember {
-			pterm.Warning.Printf("Skipping organization '%s': You are not a member\n", org)
-			skippedCount++
-		} else if !status.IsOwner {
-			pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
-			skippedCount++
-		} else {
-			err := processOrganization(org, configName, configDescription, settings, scope, setAsDefault, force)
-			if err != nil {
-				// Check if this is a "configuration exists" error
-				var configExistsErr *ConfigurationExistsError
-				if errors.As(err, &configExistsErr) {
-					pterm.Warning.Printf("Configuration '%s' already exists in organization '%s', skipping\n", configName, org)
-					skippedCount++
-				} else {
-					pterm.Error.Printf("Failed to process organization '%s': %v\n", org, err)
-					errorCount++
-				}
-			} else {
-				pterm.Success.Printf("Successfully processed organization '%s'\n", org)
-				successCount++
-			}
-		}
-
-		progressbar.Increment()
+	// Create processor for generate command
+	processor := &GenerateProcessor{
+		configName:        configName,
+		configDescription: configDescription,
+		settings:          settings,
+		scope:             scope,
+		setAsDefault:      setAsDefault,
+		force:             force,
 	}
 
-	progressbar.Stop()
+	// Use concurrent processor
+	concurrentProcessor := NewConcurrentProcessor(orgs, processor, concurrency)
+	successCount, skippedCount, errorCount := concurrentProcessor.Process()
 
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Printf("Security Configuration Generation Complete! (Success: %d, Skipped: %d, Errors: %d)", successCount, skippedCount, errorCount)
 
@@ -283,6 +492,17 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		if len(orgs) == 0 {
 			return fmt.Errorf("CSV file contains no valid organizations")
 		}
+	}
+
+	// Get concurrency flag value
+	concurrency, err := cmd.Flags().GetInt("concurrency")
+	if err != nil {
+		return err
+	}
+
+	// Validate concurrency
+	if err := validateConcurrency(concurrency); err != nil {
+		return err
 	}
 
 	// Get enterprise name
@@ -336,46 +556,16 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	// Process each organization
-	pterm.Info.Printf("Processing %d organizations...\n", len(orgs))
+	pterm.Info.Printf("Processing %d organizations with concurrency %d...\n", len(orgs), concurrency)
 
-	progressbar, _ := pterm.DefaultProgressbar.WithTotal(len(orgs)).WithTitle("Deleting configurations").Start()
-
-	successCount := 0
-	errorCount := 0
-	skippedCount := 0
-
-	for _, org := range orgs {
-		progressbar.UpdateTitle(fmt.Sprintf("Processing %s", org))
-
-		// Check membership for this specific organization
-		status, err := checkSingleOrganizationMembership(org)
-		if err != nil {
-			pterm.Warning.Printf("Failed to check membership for organization '%s': %v, skipping\n", org, err)
-			skippedCount++
-		} else if !status.IsMember {
-			pterm.Warning.Printf("Skipping organization '%s': You are not a member\n", org)
-			skippedCount++
-		} else if !status.IsOwner {
-			pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
-			skippedCount++
-		} else {
-			deleted, err := deleteConfigurationFromOrg(org, configName)
-			if err != nil {
-				pterm.Error.Printf("Failed to delete configuration from organization '%s': %v\n", org, err)
-				errorCount++
-			} else if deleted {
-				pterm.Success.Printf("Successfully deleted configuration from organization '%s'\n", org)
-				successCount++
-			} else {
-				// Configuration was not found, already logged as warning in deleteConfigurationFromOrg
-				skippedCount++
-			}
-		}
-
-		progressbar.Increment()
+	// Create processor for delete command
+	processor := &DeleteProcessor{
+		configName: configName,
 	}
 
-	progressbar.Stop()
+	// Use concurrent processor
+	concurrentProcessor := NewConcurrentProcessor(orgs, processor, concurrency)
+	successCount, skippedCount, errorCount := concurrentProcessor.Process()
 
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Printf("Security Configuration Deletion Complete! (Success: %d, Skipped: %d, Errors: %d)", successCount, skippedCount, errorCount)
 
@@ -401,6 +591,17 @@ func runModify(cmd *cobra.Command, args []string) error {
 		if len(orgs) == 0 {
 			return fmt.Errorf("CSV file contains no valid organizations")
 		}
+	}
+
+	// Get concurrency flag value
+	concurrency, err := cmd.Flags().GetInt("concurrency")
+	if err != nil {
+		return err
+	}
+
+	// Validate concurrency
+	if err := validateConcurrency(concurrency); err != nil {
+		return err
 	}
 
 	// Get enterprise name
@@ -503,46 +704,18 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	// Process each organization
-	pterm.Info.Printf("Processing %d organizations...\n", len(orgs))
+	pterm.Info.Printf("Processing %d organizations with concurrency %d...\n", len(orgs), concurrency)
 
-	progressbar, _ := pterm.DefaultProgressbar.WithTotal(len(orgs)).WithTitle("Modifying configurations").Start()
-
-	successCount := 0
-	errorCount := 0
-	skippedCount := 0
-
-	for _, org := range orgs {
-		progressbar.UpdateTitle(fmt.Sprintf("Processing %s", org))
-
-		// Check membership for this specific organization
-		status, err := checkSingleOrganizationMembership(org)
-		if err != nil {
-			pterm.Warning.Printf("Failed to check membership for organization '%s': %v, skipping\n", org, err)
-			skippedCount++
-		} else if !status.IsMember {
-			pterm.Warning.Printf("Skipping organization '%s': You are not a member\n", org)
-			skippedCount++
-		} else if !status.IsOwner {
-			pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
-			skippedCount++
-		} else {
-			updated, err := modifyConfigurationInOrg(org, configName, newDescription, newSettings)
-			if err != nil {
-				pterm.Error.Printf("Failed to modify configuration in organization '%s': %v\n", org, err)
-				errorCount++
-			} else if updated {
-				pterm.Success.Printf("Successfully modified configuration in organization '%s'\n", org)
-				successCount++
-			} else {
-				// Configuration was not found, already logged as warning in modifyConfigurationInOrg
-				skippedCount++
-			}
-		}
-
-		progressbar.Increment()
+	// Create processor for modify command
+	processor := &ModifyProcessor{
+		configName:     configName,
+		newDescription: newDescription,
+		newSettings:    newSettings,
 	}
 
-	progressbar.Stop()
+	// Use concurrent processor
+	concurrentProcessor := NewConcurrentProcessor(orgs, processor, concurrency)
+	successCount, skippedCount, errorCount := concurrentProcessor.Process()
 
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Printf("Security Configuration Modification Complete! (Success: %d, Skipped: %d, Errors: %d)", successCount, skippedCount, errorCount)
 
@@ -1402,7 +1575,7 @@ func fetchSecurityConfigurations(org string) ([]SecurityConfiguration, error) {
 // handleCopyFromOrg handles the logic for copying a configuration from an existing organization
 func handleCopyFromOrg(copyFromOrg string) (string, string, map[string]interface{}, string, bool, error) {
 	pterm.Info.Printf("Fetching security configurations from organization '%s'...\n", copyFromOrg)
-	
+
 	// Check if user has access to the source organization
 	status, err := checkSingleOrganizationMembership(copyFromOrg)
 	if err != nil {
@@ -1441,7 +1614,7 @@ func handleCopyFromOrg(copyFromOrg string) (string, string, map[string]interface
 
 	// Get the selected configuration details
 	selectedConfigData := configMap[selectedConfig]
-	
+
 	// Get detailed configuration including settings
 	configDetails, err := getSecurityConfigurationDetails(copyFromOrg, selectedConfigData.ID)
 	if err != nil {
@@ -1449,7 +1622,7 @@ func handleCopyFromOrg(copyFromOrg string) (string, string, map[string]interface
 	}
 
 	pterm.Success.Printf("Selected configuration '%s' from organization '%s'\n", selectedConfigData.Name, copyFromOrg)
-	
+
 	// Display current settings
 	pterm.Info.Println("Configuration details that will be copied:")
 	displayCurrentSettings(configDetails.Settings, configDetails.Description)

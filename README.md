@@ -1,6 +1,6 @@
 # GitHub Security Configuration CLI Extension
 
-A GitHub CLI extension to create and apply security configurations across all organizations in a GitHub Enterprise.
+A GitHub CLI extension to create and apply security configurations across many organizations in a GitHub Enterprise.
 
 > [!NOTE]
 > This extension currently only supports configuring GitHub Advanced Security and Secret Scanning features as part of a security configuration.
@@ -56,10 +56,10 @@ To copy an existing security configuration from another organization:
 gh security-config generate --copy-from-org <ORG_NAME>
 ```
 
-You can also combine the copy functionality with organization targeting:
+You can also combine the copy functionality with organization targeting and concurrency:
 
 ```bash
-gh security-config generate --copy-from-org <ORG_NAME> --org-list path/to/organizations.csv
+gh security-config generate --copy-from-org <ORG_NAME> --org-list path/to/organizations.csv --concurrency 5
 ```
 
 The extension will guide you through:
@@ -100,6 +100,49 @@ The `--copy-from-org` flag allows you to copy an existing security configuration
 > [!NOTE]
 > When using `--copy-from-org`, you can still customize the repository attachment scope and default setting for the target organizations, even though the security settings themselves are copied from the source.
 
+### Concurrency and Performance
+
+All commands support concurrent requests using the `--concurrency` flag to improve performance when working with many organizations:
+
+```bash
+# Process organizations sequentially (default)
+gh security-config generate
+
+# Process up to 5 organizations concurrently
+gh security-config generate --concurrency 5
+
+# Use maximum concurrency for fastest processing
+gh security-config delete --concurrency 20 --org-list organizations.csv
+```
+
+#### Concurrency Settings
+
+- **Default**: `1` (sequential processing, maintains existing behavior)
+- **Range**: `1-20` (validated to prevent excessive API usage)
+- **Usage**: Available on all commands (`generate`, `delete`, `modify`)
+
+#### Performance Benefits
+
+- **Faster Execution**: Significantly reduces total processing time for large numbers of organizations
+- **Configurable**: Choose concurrency level based on your needs and environment
+- **Progress Tracking**: Real-time progress updates work seamlessly with concurrent processing
+
+> [!WARNING]
+> **Rate Limiting Considerations**: Setting concurrency higher than 1 increases the likelihood of encountering GitHub's secondary rate limits. To avoid rate limiting issues, consider exempting the user from rate limits.
+
+#### Example Usage
+
+```bash
+# Conservative approach - sequential processing
+gh security-config generate --org-list large-org-list.csv
+
+# Moderate concurrency for faster processing
+gh security-config modify --concurrency 3 --org-list organizations.csv
+
+# High concurrency (use only if rate limit exempt)
+gh security-config delete --concurrency 10 --org-list organizations.csv
+```
+
 ### Delete Security Configurations
 
 Run the interactive security configuration deletion:
@@ -112,6 +155,12 @@ To target specific organizations using a CSV file:
 
 ```bash
 gh security-config delete --org-list path/to/organizations.csv
+```
+
+For faster processing with many organizations, use concurrency:
+
+```bash
+gh security-config delete --org-list path/to/organizations.csv --concurrency 3
 ```
 
 The extension will guide you through:
@@ -137,6 +186,12 @@ To target specific organizations using a CSV file:
 gh security-config modify --org-list path/to/organizations.csv
 ```
 
+For faster processing with many organizations, use concurrency:
+
+```bash
+gh security-config modify --org-list path/to/organizations.csv --concurrency 5
+```
+
 The extension will guide you through:
 
 1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
@@ -151,6 +206,7 @@ The extension will guide you through:
 ## Features
 
 - 🏢 **Enterprise-wide Management**: Automatically discovers and processes all organizations in your enterprise
+- ⚡ **Concurrent Processing**: Configurable concurrency (1-20) for faster processing of many organizations
 - 🔒 **Comprehensive Security Settings**: Configure GitHub Advanced Security features and related settings:
   - GitHub Advanced Security
   - Secret Scanning
@@ -163,7 +219,7 @@ The extension will guide you through:
 - ✏️ **Configuration Modification**: Update existing security configurations across all enterprise organizations with selective setting changes
 - ❌ **Configuration Deletion**: Safely delete security configurations from all enterprise organizations with confirmation prompts
 - ⚙️ **Default Configuration**: Optionally set configurations as defaults for new repositories
-- 📊 **Progress Tracking**: Visual progress indicators
+- 📊 **Progress Tracking**: Visual progress indicators with concurrent operation support
 - 🖥️ **GitHub Enterprise Server Support**: Works with both GitHub.com and GitHub Enterprise Server
 
 ## Security Settings
