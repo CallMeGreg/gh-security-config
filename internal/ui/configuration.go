@@ -14,12 +14,22 @@ func GetSecurityConfigInput() (string, string, error) {
 		return "", "", err
 	}
 
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", "", fmt.Errorf("configuration name is required")
+	}
+
 	description, err := pterm.DefaultInteractiveTextInput.WithDefaultText("Security configuration applied across enterprise organizations").WithMultiLine(false).Show("Enter security configuration description")
 	if err != nil {
 		return "", "", err
 	}
 
-	return strings.TrimSpace(name), strings.TrimSpace(description), nil
+	description = strings.TrimSpace(description)
+	if description == "" {
+		return "", "", fmt.Errorf("configuration description is required")
+	}
+
+	return name, description, nil
 }
 
 // GetSecuritySettings prompts for security settings configuration
