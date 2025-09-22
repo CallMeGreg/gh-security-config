@@ -33,27 +33,30 @@ gh extension install CallMeGreg/gh-security-config
 
 ## Usage
 
-The extension provides three main commands for managing security configurations across enterprise organizations:
+The extension provides four main commands for managing security configurations across enterprise organizations:
 
 ### Commands
 
 - **`generate`** - Create and apply new security configurations across organizations
-- **`delete`** - Remove existing security configurations from organizations  
+- **`apply`** - Apply existing security configurations to repositories across organizations
 - **`modify`** - Update existing security configurations across organizations
+- **`delete`** - Remove existing security configurations from organizations
 
 ### Persistent Flags
 
 These flags are available on all commands:
 
-- **`--org-list string`** - Path to CSV file containing organization names to target (one per line, no header)
-- **`--concurrency int`** - Number of concurrent requests (1-20, default: 1)
+- **`--org-list string`** (`-o`) - Path to CSV file containing organization names to target (one per line, no header)
+- **`--concurrency int`** (`-c`) - Number of concurrent requests (1-20, default: 1)
+- **`--enterprise-slug string`** (`-e`) - GitHub Enterprise slug (e.g., github). Skips interactive prompt when provided
+- **`--github-enterprise-server-url string`** (`-u`) - GitHub Enterprise Server URL (e.g., github.company.com). When provided, assumes GitHub Enterprise Server (not GitHub.com)
 
 ### Generate Command Flags
 
 The `generate` command has additional flags:
 
-- **`--copy-from-org string`** - Organization name to copy an existing configuration from
-- **`--force`** - Force deletion of existing configurations with the same name before creating new ones
+- **`--copy-from-org string`** (`-r`) - Organization name to copy an existing configuration from
+- **`--force`** (`-f`) - Force deletion of existing configurations with the same name before creating new ones
 
 ### Basic Usage Examples
 
@@ -61,11 +64,17 @@ The `generate` command has additional flags:
 # Create a new security configuration interactively
 gh security-config generate
 
+# Apply an existing security configuration to repositories
+gh security-config apply
+
 # Delete a security configuration interactively
 gh security-config delete
 
 # Modify a security configuration interactively
 gh security-config modify
+
+# Use flags to skip interactive prompts
+gh security-config generate -e my-enterprise -u github.mycompany.com
 ```
 
 ### Organization Targeting
@@ -102,7 +111,7 @@ All commands support concurrent requests using the `--concurrency` flag to impro
 
 - **Default**: `1` (sequential processing, maintains existing behavior)
 - **Range**: `1-20` (validated to prevent excessive API usage)
-- **Usage**: Available on all commands (`generate`, `delete`, `modify`)
+- **Usage**: Available on all commands (`generate`, `apply`, `delete`, `modify`)
 
 #### Performance Benefits
 
@@ -112,6 +121,18 @@ All commands support concurrent requests using the `--concurrency` flag to impro
 
 > [!WARNING]
 > **Rate Limiting Considerations**: Setting concurrency higher than 1 increases the likelihood of encountering GitHub's secondary rate limits. To avoid rate limiting issues, consider [exempting the user from rate limits](https://docs.github.com/en/enterprise-server@3.15/admin/administering-your-instance/administering-your-instance-from-the-command-line/command-line-utilities#ghe-config).
+
+### Apply Security Configurations
+
+The extension will guide you through:
+
+1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
+2. **Configuration Selection**: Specify the name of an existing security configuration to apply
+3. **Repository Selection**: Choose which repositories should have the configuration applied
+4. **Confirmation**: Review the operation summary and confirm application
+
+> [!NOTE]
+> The apply operation will attach the specified security configuration to repositories across ALL organizations in the enterprise where the configuration exists. This allows you to apply configurations that were created manually, or without targeting repositories initially.
 
 ### Delete Security Configurations
 
