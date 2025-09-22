@@ -22,6 +22,7 @@ func init() {
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(deleteCmd)
 	rootCmd.AddCommand(modifyCmd)
+	rootCmd.AddCommand(applyCmd)
 }
 
 // Execute runs the root command

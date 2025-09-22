@@ -183,3 +183,45 @@ func HandleCopyFromOrg(copyFromOrg string) (string, string, map[string]interface
 
 	return selectedConfigData.Name, configDetails.Description, configDetails.Settings, scope, setAsDefault, nil
 }
+
+// ConfirmApplyOperation shows operation summary and asks for confirmation for apply command
+func ConfirmApplyOperation(orgs []string, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool) (bool, error) {
+	pterm.Println()
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgYellow)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Println("Apply Operation Summary")
+
+	pterm.Printf("Organizations: %d\n", len(orgs))
+	pterm.Printf("Configuration Name: %s\n", pterm.Yellow(configName))
+	pterm.Printf("Configuration Description: %s\n", pterm.Yellow(configDescription))
+	pterm.Println()
+
+	pterm.Info.Println("Security Settings:")
+	for key, value := range settings {
+		valueStr := fmt.Sprintf("%v", value)
+		var coloredValue string
+
+		switch valueStr {
+		case "enabled", "enforced":
+			coloredValue = pterm.Green(valueStr)
+		case "disabled", "unenforced":
+			coloredValue = pterm.Red(valueStr)
+		case "not_set":
+			coloredValue = pterm.Yellow(valueStr)
+		default:
+			coloredValue = pterm.Yellow(valueStr)
+		}
+
+		pterm.Printf("  %s: %s\n", pterm.Cyan(key), coloredValue)
+	}
+	pterm.Println()
+
+	pterm.Printf("Attachment Scope: %s\n", pterm.Magenta(scope))
+	pterm.Printf("Set as Default: %s\n", pterm.Cyan(fmt.Sprintf("%t", setAsDefault)))
+	pterm.Println()
+
+	confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Proceed with applying security configuration to repositories?").Show()
+	if err != nil {
+		return false, err
+	}
+
+	return confirmed, nil
+}

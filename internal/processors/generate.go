@@ -66,10 +66,12 @@ func (gp *GenerateProcessor) processOrganization(org string) error {
 		return fmt.Errorf("failed to create security configuration: %w", err)
 	}
 
-	// Attach configuration to repositories
-	err = api.AttachConfigurationToRepos(org, configID, gp.Scope)
-	if err != nil {
-		return fmt.Errorf("failed to attach configuration to repositories: %w", err)
+	// Attach configuration to repositories only if scope is not "none"
+	if gp.Scope != "none" {
+		err = api.AttachConfigurationToRepos(org, configID, gp.Scope)
+		if err != nil {
+			return fmt.Errorf("failed to attach configuration to repositories: %w", err)
+		}
 	}
 
 	// Set as default if requested

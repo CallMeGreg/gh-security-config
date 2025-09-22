@@ -82,6 +82,7 @@ func GetAttachmentScope() (string, error) {
 		"all",
 		"public",
 		"private_or_internal",
+		"none",
 	}).WithDefaultOption("all").Show("Select repositories to attach configuration to")
 	if err != nil {
 		return "", err
@@ -180,4 +181,32 @@ func GetSecuritySettingsForUpdate(currentSettings map[string]interface{}) (map[s
 	}
 
 	return newSettings, nil
+}
+
+// GetConfigNameForApplication prompts for configuration name to apply
+func GetConfigNameForApplication() (string, error) {
+	configName, err := pterm.DefaultInteractiveTextInput.WithDefaultText("").WithMultiLine(false).Show("Enter the name of the security configuration to apply")
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(configName) == "" {
+		return "", fmt.Errorf("configuration name is required")
+	}
+
+	return strings.TrimSpace(configName), nil
+}
+
+// GetAttachmentScopeForApplication prompts for repository attachment scope (without 'none' option)
+func GetAttachmentScopeForApplication() (string, error) {
+	scope, err := pterm.DefaultInteractiveSelect.WithOptions([]string{
+		"all",
+		"public",
+		"private_or_internal",
+	}).WithDefaultOption("all").Show("Select repositories to attach configuration to")
+	if err != nil {
+		return "", err
+	}
+
+	return scope, nil
 }

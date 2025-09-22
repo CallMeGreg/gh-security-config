@@ -156,6 +156,7 @@ When attaching configurations to repositories, you can choose:
 - **all**: Apply to all repositories in the organization
 - **public**: Apply only to public repositories
 - **private_or_internal**: Apply only to private and internal repositories
+- **none**: Create the configuration without applying it to any repositories
 
 ## Demo
 
