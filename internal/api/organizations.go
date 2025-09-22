@@ -86,58 +86,18 @@ func GetOrganizations(enterprise, orgListPath string) ([]string, error) {
 		}
 		pterm.Success.Printf("Found %d organizations in CSV file\n", len(csvOrgs))
 
-		// Fetch all organizations from enterprise to validate against
-		pterm.Info.Println("Fetching organizations from enterprise to validate CSV list...")
-		enterpriseOrgs, err := FetchOrganizations(enterprise)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch enterprise organizations for validation: %w", err)
-		}
-		pterm.Success.Printf("Found %d organizations in enterprise '%s'\n", len(enterpriseOrgs), enterprise)
-
-		// Create a map for faster lookup
-		enterpriseOrgMap := make(map[string]bool)
-		for _, org := range enterpriseOrgs {
-			enterpriseOrgMap[org] = true
-		}
-
-		// Validate CSV organizations against enterprise organizations
-		var validOrgs []string
-		var invalidOrgs []string
-
-		for _, org := range csvOrgs {
-			if enterpriseOrgMap[org] {
-				validOrgs = append(validOrgs, org)
-			} else {
-				invalidOrgs = append(invalidOrgs, org)
+		// Show the list of organizations that will be targeted
+		if len(csvOrgs) <= 10 {
+			pterm.Info.Println("Organizations to be targeted:")
+			for _, org := range csvOrgs {
+				pterm.Printf("  - %s\n", pterm.Green(org))
 			}
-		}
-
-		// Warn about invalid organizations
-		if len(invalidOrgs) > 0 {
-			pterm.Warning.Printf("Found %d organizations in CSV that do not exist in enterprise '%s':\n", len(invalidOrgs), enterprise)
-			for _, org := range invalidOrgs {
-				pterm.Printf("  - %s (not found in enterprise)\n", pterm.Red(org))
-			}
-			pterm.Println()
-		}
-
-		// Check if we have any valid organizations left
-		if len(validOrgs) == 0 {
-			return nil, fmt.Errorf("no valid organizations found in CSV file that exist in enterprise '%s'", enterprise)
-		}
-
-		if len(invalidOrgs) > 0 {
-			pterm.Info.Printf("Proceeding with %d valid organizations (skipping %d invalid)\n", len(validOrgs), len(invalidOrgs))
-		}
-
-		// Show the list of valid organizations that will be targeted
-		pterm.Info.Println("Valid organizations to be targeted:")
-		for _, org := range validOrgs {
-			pterm.Printf("  - %s\n", pterm.Green(org))
+		} else {
+			pterm.Info.Printf("Organizations to be targeted: %d organizations\n", len(csvOrgs))
 		}
 		pterm.Println()
 
-		return validOrgs, nil
+		return csvOrgs, nil
 	}
 
 	// Use existing enterprise API fetching
