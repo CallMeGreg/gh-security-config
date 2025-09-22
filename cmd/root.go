@@ -11,6 +11,9 @@ var rootCmd = &cobra.Command{
 	Use:   "security-config",
 	Short: "GitHub Security Configuration Management for Enterprises",
 	Long:  "A GitHub CLI extension to manage security configurations across all organizations in an enterprise",
+	CompletionOptions: cobra.CompletionOptions{
+		DisableDefaultCmd: true,
+	},
 }
 
 func init() {
