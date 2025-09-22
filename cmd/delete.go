@@ -37,14 +37,25 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Get flag values for enterprise settings
+	enterpriseFlag, err := cmd.Flags().GetString("enterprise-slug")
+	if err != nil {
+		return err
+	}
+
+	serverURLFlag, err := cmd.Flags().GetString("github-enterprise-server-url")
+	if err != nil {
+		return err
+	}
+
 	// Get enterprise name
-	enterprise, err := ui.GetEnterpriseInput()
+	enterprise, err := ui.GetEnterpriseInput(enterpriseFlag)
 	if err != nil {
 		return err
 	}
 
 	// Get GitHub Enterprise Server URL if needed
-	serverURL, err := ui.GetServerURLInput()
+	serverURL, err := ui.GetServerURLInput(serverURLFlag)
 	if err != nil {
 		return err
 	}

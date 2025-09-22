@@ -21,8 +21,8 @@ var generateCmd = &cobra.Command{
 
 func init() {
 	// Command-specific flags
-	generateCmd.Flags().Bool("force", false, "Force deletion of existing configurations with the same name before creating new ones")
-	generateCmd.Flags().String("copy-from-org", "", "Organization name to copy an existing configuration from")
+	generateCmd.Flags().BoolP("force", "f", false, "Force deletion of existing configurations with the same name before creating new ones")
+	generateCmd.Flags().StringP("copy-from-org", "r", "", "Organization name to copy an existing configuration from")
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
@@ -56,14 +56,25 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Get flag values for enterprise settings
+	enterpriseFlag, err := cmd.Flags().GetString("enterprise-slug")
+	if err != nil {
+		return err
+	}
+
+	serverURLFlag, err := cmd.Flags().GetString("github-enterprise-server-url")
+	if err != nil {
+		return err
+	}
+
 	// Get enterprise name
-	enterprise, err := ui.GetEnterpriseInput()
+	enterprise, err := ui.GetEnterpriseInput(enterpriseFlag)
 	if err != nil {
 		return err
 	}
 
 	// Get GitHub Enterprise Server URL if needed
-	serverURL, err := ui.GetServerURLInput()
+	serverURL, err := ui.GetServerURLInput(serverURLFlag)
 	if err != nil {
 		return err
 	}
