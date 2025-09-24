@@ -50,7 +50,8 @@ These flags are available on all commands:
 - **`--concurrency int`** (`-c`) - Number of concurrent requests (1-20, default: 1)
 - **`--enterprise-slug string`** (`-e`) - GitHub Enterprise slug (e.g., github). Skips interactive prompt when provided
 - **`--github-enterprise-server-url string`** (`-u`) - GitHub Enterprise Server URL (e.g., github.company.com). Skips interactive prompt when provided
-- **`--dependabot-available string`** (`-d`) - Whether Dependabot is available in your GHES instance (true/false). Skips interactive prompt when provided
+- **`--dependabot-alerts-available string`** (`-a`) - Whether Dependabot Alerts are available in your GHES instance (true/false). Skips interactive prompt when provided
+- **`--dependabot-security-updates-available string`** (`-s`) - Whether Dependabot Security Updates are available in your GHES instance (true/false). Skips interactive prompt when provided
 
 ### Generate Command Flags
 
@@ -75,7 +76,7 @@ gh security-config modify
 gh security-config delete
 
 # Use flags to skip interactive prompts
-gh security-config generate -e my-enterprise -u github.mycompany.com
+gh security-config generate -e my-enterprise -u github.mycompany.com -a true -s false
 ```
 
 ### Organization Targeting
@@ -125,14 +126,14 @@ All commands support concurrent requests using the `--concurrency` flag to impro
 
 ### Error Handling and Requirements
 
-#### Dependabot Availability
-If you attempt to enable Dependabot settings when they're not available:
+#### Dependabot Feature Availability
 
-- **Automatic Detection**: The tool will detect API errors related to Dependabot unavailability
-- **Graceful Stopping**: Processing will stop immediately with a clear error message
-- **Guidance Provided**: The tool will advise you to either remove Dependabot settings or enable Dependabot on your instance
+Dependabot Alerts and Security Updates have different availability requirements:
 
-To avoid these issues, use the `--dependabot-available` flag to specify availability upfront, or answer the interactive prompt when it appears.
+- **Dependabot Alerts**: Available when GitHub Connect, Dependency Graph, and Dependabot are enabled
+- **Dependabot Security Updates**: Available when Dependabot Alerts and GitHub Actions are enabled
+
+**Checking Availability**: Navigate to `Enterprise settings` → `Settings` → `Code security and analysis` to verify which features are available.
 
 ### Apply Security Configurations
 
@@ -185,9 +186,6 @@ The extension allows you to set the following features within the security confi
 | Secret Scanning Push Protection | Block commits with secrets | `enabled`, `disabled`, `not_set` |
 | Secret Scanning Non-Provider Patterns | Scan for [non-provider patterns](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/using-advanced-secret-scanning-and-push-protection-features/non-provider-patterns) | `enabled`, `disabled`, `not_set` |
 | Enforcement | Restrict setting changes at the repository level | `enforced`, `unenforced` |
-
-> [!NOTE]
-> Dependabot settings are only available if GitHub Connect and Dependabot are enabled in your GitHub Enterprise Server instance. You can confirm Dependabot availability by navigating to `Enterprise settings` --> `GitHub Connect` --> `Dependabot`.
 
 ## Repository Attachment Scopes
 

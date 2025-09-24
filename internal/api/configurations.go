@@ -250,19 +250,21 @@ func SetConfigurationAsDefault(org string, configID int) error {
 // parseAPIError checks for 422 status codes related to Dependabot unavailability
 func parseAPIError(stderr string, org string, settings map[string]interface{}) error {
 	if strings.Contains(stderr, "422") {
-		// Check if Dependabot settings are being configured
+		// Check for specific Dependabot Alerts errors
 		if val, hasDependabotAlerts := settings["dependabot_alerts"]; hasDependabotAlerts {
 			if val != "not_set" && val != "disabled" {
 				return &types.DependabotUnavailableError{
-					Feature: "alerts",
+					Feature: "Dependabot Alerts",
 					OrgName: org,
 				}
 			}
 		}
+
+		// Check for specific Dependabot Security Updates errors
 		if val, hasDependabotUpdates := settings["dependabot_security_updates"]; hasDependabotUpdates {
 			if val != "not_set" && val != "disabled" {
 				return &types.DependabotUnavailableError{
-					Feature: "security updates",
+					Feature: "Dependabot Security Updates",
 					OrgName: org,
 				}
 			}

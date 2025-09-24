@@ -48,18 +48,37 @@ func GetServerURLInput(serverURLFlag string) (string, error) {
 	return strings.TrimSpace(serverURL), nil
 }
 
-// GetDependabotAvailability prompts for Dependabot availability or uses provided value
-func GetDependabotAvailability(dependabotAvailable *bool) (bool, error) {
-	// If Dependabot availability is provided via flag, use it
-	if dependabotAvailable != nil {
-		return *dependabotAvailable, nil
+// GetDependabotAlertsAvailability prompts for Dependabot Alerts availability or uses provided value
+func GetDependabotAlertsAvailability(dependabotAlertsAvailable *bool) (bool, error) {
+	// If Dependabot Alerts availability is provided via flag, use it
+	if dependabotAlertsAvailable != nil {
+		return *dependabotAlertsAvailable, nil
 	}
 
-	// Otherwise, prompt for Dependabot availability
-	pterm.Info.Println("To configure Dependabot settings, GitHub Connect and Dependabot must be enabled in your instance.")
-	pterm.Info.Println("You can confirm this by navigating to: Enterprise settings → GitHub Connect → Dependabot")
+	// Otherwise, prompt for Dependabot Alerts availability
+	pterm.Info.Println("To configure Dependabot Alerts, GitHub Connect and Dependabot must be enabled in your instance.")
+	pterm.Info.Println("You can confirm this by navigating to: Enterprise settings → Settings → Code security and analysis")
 
-	isAvailable, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Is Dependabot available in your instance?").WithDefaultValue(false).Show()
+	isAvailable, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Are Dependabot Alerts available in your instance?").WithDefaultValue(false).Show()
+	if err != nil {
+		return false, err
+	}
+
+	return isAvailable, nil
+}
+
+// GetDependabotSecurityUpdatesAvailability prompts for Dependabot Security Updates availability or uses provided value
+func GetDependabotSecurityUpdatesAvailability(dependabotSecurityUpdatesAvailable *bool) (bool, error) {
+	// If Dependabot Security Updates availability is provided via flag, use it
+	if dependabotSecurityUpdatesAvailable != nil {
+		return *dependabotSecurityUpdatesAvailable, nil
+	}
+
+	// Otherwise, prompt for Dependabot Security Updates availability
+	pterm.Info.Println("To configure Dependabot Security Updates, additional setup beyond basic Dependabot may be required.")
+	pterm.Info.Println("You can confirm this by navigating to: Enterprise settings → Settings → Code security and analysis")
+
+	isAvailable, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Are Dependabot Security Updates available in your instance?").WithDefaultValue(false).Show()
 	if err != nil {
 		return false, err
 	}

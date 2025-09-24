@@ -66,7 +66,12 @@ func runModify(cmd *cobra.Command, args []string) error {
 	ui.SetupGitHubHost(serverURL)
 
 	// Check Dependabot availability
-	dependabotAvailable, err := ui.GetDependabotAvailability(commonFlags.DependabotAvailable)
+	dependabotAlertsAvailable, err := ui.GetDependabotAlertsAvailability(commonFlags.DependabotAlertsAvailable)
+	if err != nil {
+		return err
+	}
+
+	dependabotSecurityUpdatesAvailable, err := ui.GetDependabotSecurityUpdatesAvailability(commonFlags.DependabotSecurityUpdatesAvailable)
 	if err != nil {
 		return err
 	}
@@ -138,7 +143,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get updated security settings
-	newSettings, err := ui.GetSecuritySettingsForUpdate(currentSettings, dependabotAvailable)
+	newSettings, err := ui.GetSecuritySettingsForUpdate(currentSettings, dependabotAlertsAvailable, dependabotSecurityUpdatesAvailable)
 	if err != nil {
 		return err
 	}

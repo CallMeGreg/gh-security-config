@@ -33,7 +33,7 @@ func GetSecurityConfigInput() (string, string, error) {
 }
 
 // GetSecuritySettings prompts for security settings configuration
-func GetSecuritySettings(dependabotAvailable bool) (map[string]interface{}, error) {
+func GetSecuritySettings(dependabotAlertsAvailable bool, dependabotSecurityUpdatesAvailable bool) (map[string]interface{}, error) {
 	settings := make(map[string]interface{})
 
 	pterm.Info.Println("Configure security settings:")
@@ -45,16 +45,17 @@ func GetSecuritySettings(dependabotAvailable bool) (map[string]interface{}, erro
 	}
 	settings["advanced_security"] = advancedSecurity
 
-	// Dependabot settings (only if available)
-	if dependabotAvailable {
-		// Dependabot Alerts
+	// Dependabot Alerts (only if available)
+	if dependabotAlertsAvailable {
 		dependabotAlerts, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("not_set").Show("Dependabot Alerts")
 		if err != nil {
 			return nil, err
 		}
 		settings["dependabot_alerts"] = dependabotAlerts
+	}
 
-		// Dependabot Security Updates
+	// Dependabot Security Updates (only if available)
+	if dependabotSecurityUpdatesAvailable {
 		dependabotSecurityUpdates, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("not_set").Show("Dependabot Security Updates")
 		if err != nil {
 			return nil, err
@@ -172,30 +173,34 @@ func GetUpdatedDescription(currentDescription string) (string, error) {
 }
 
 // GetSecuritySettingsForUpdate prompts for updated security settings
-func GetSecuritySettingsForUpdate(currentSettings map[string]interface{}, dependabotAvailable bool) (map[string]interface{}, error) {
+func GetSecuritySettingsForUpdate(currentSettings map[string]interface{}, dependabotAlertsAvailable bool, dependabotSecurityUpdatesAvailable bool) (map[string]interface{}, error) {
 	newSettings := make(map[string]interface{})
 
 	pterm.Info.Println("Update security settings (press Enter to keep current value):")
 
 	settingsConfig := []struct {
-		key                string
-		description        string
-		options            []string
-		defaultValue       string
-		requiresDependabot bool
+		key                          string
+		description                  string
+		options                      []string
+		defaultValue                 string
+		requiresDependabotAlerts     bool
+		requiresDependabotSecUpdates bool
 	}{
-		{"advanced_security", "GitHub Advanced Security", []string{"enabled", "disabled"}, "enabled", false},
-		{"dependabot_alerts", "Dependabot Alerts", []string{"enabled", "disabled", "not_set"}, "not_set", true},
-		{"dependabot_security_updates", "Dependabot Security Updates", []string{"enabled", "disabled", "not_set"}, "not_set", true},
-		{"secret_scanning", "Secret Scanning", []string{"enabled", "disabled", "not_set"}, "enabled", false},
-		{"secret_scanning_push_protection", "Secret Scanning Push Protection", []string{"enabled", "disabled", "not_set"}, "enabled", false},
-		{"secret_scanning_non_provider_patterns", "Secret Scanning Non-Provider Patterns", []string{"enabled", "disabled", "not_set"}, "not_set", false},
-		{"enforcement", "Enforcement Status", []string{"enforced", "unenforced"}, "enforced", false},
+		{"advanced_security", "GitHub Advanced Security", []string{"enabled", "disabled"}, "enabled", false, false},
+		{"dependabot_alerts", "Dependabot Alerts", []string{"enabled", "disabled", "not_set"}, "not_set", true, false},
+		{"dependabot_security_updates", "Dependabot Security Updates", []string{"enabled", "disabled", "not_set"}, "not_set", false, true},
+		{"secret_scanning", "Secret Scanning", []string{"enabled", "disabled", "not_set"}, "enabled", false, false},
+		{"secret_scanning_push_protection", "Secret Scanning Push Protection", []string{"enabled", "disabled", "not_set"}, "enabled", false, false},
+		{"secret_scanning_non_provider_patterns", "Secret Scanning Non-Provider Patterns", []string{"enabled", "disabled", "not_set"}, "not_set", false, false},
+		{"enforcement", "Enforcement Status", []string{"enforced", "unenforced"}, "enforced", false, false},
 	}
 
 	for _, config := range settingsConfig {
 		// Skip Dependabot settings if not available
-		if config.requiresDependabot && !dependabotAvailable {
+		if config.requiresDependabotAlerts && !dependabotAlertsAvailable {
+			continue
+		}
+		if config.requiresDependabotSecUpdates && !dependabotSecurityUpdatesAvailable {
 			continue
 		}
 
