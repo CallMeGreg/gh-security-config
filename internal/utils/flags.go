@@ -9,8 +9,10 @@ import (
 
 // GetCommonFlags extracts common flags used across all commands
 type CommonFlags struct {
-	OrgListPath string
-	Concurrency int
+	OrgListPath                        string
+	Concurrency                        int
+	DependabotAlertsAvailable          *bool
+	DependabotSecurityUpdatesAvailable *bool
 }
 
 // ExtractCommonFlags gets org-list and concurrency flags from command
@@ -25,9 +27,47 @@ func ExtractCommonFlags(cmd *cobra.Command) (*CommonFlags, error) {
 		return nil, err
 	}
 
+	dependabotAlertsAvailableFlag, err := cmd.Flags().GetString("dependabot-alerts-available")
+	if err != nil {
+		return nil, err
+	}
+
+	dependabotSecurityUpdatesAvailableFlag, err := cmd.Flags().GetString("dependabot-security-updates-available")
+	if err != nil {
+		return nil, err
+	}
+
+	var dependabotAlertsAvailable *bool
+	if dependabotAlertsAvailableFlag != "" {
+		if dependabotAlertsAvailableFlag == "true" {
+			val := true
+			dependabotAlertsAvailable = &val
+		} else if dependabotAlertsAvailableFlag == "false" {
+			val := false
+			dependabotAlertsAvailable = &val
+		} else {
+			return nil, fmt.Errorf("invalid value for dependabot-alerts-available flag: %s (must be 'true' or 'false')", dependabotAlertsAvailableFlag)
+		}
+	}
+
+	var dependabotSecurityUpdatesAvailable *bool
+	if dependabotSecurityUpdatesAvailableFlag != "" {
+		if dependabotSecurityUpdatesAvailableFlag == "true" {
+			val := true
+			dependabotSecurityUpdatesAvailable = &val
+		} else if dependabotSecurityUpdatesAvailableFlag == "false" {
+			val := false
+			dependabotSecurityUpdatesAvailable = &val
+		} else {
+			return nil, fmt.Errorf("invalid value for dependabot-security-updates-available flag: %s (must be 'true' or 'false')", dependabotSecurityUpdatesAvailableFlag)
+		}
+	}
+
 	return &CommonFlags{
-		OrgListPath: orgListPath,
-		Concurrency: concurrency,
+		OrgListPath:                        orgListPath,
+		Concurrency:                        concurrency,
+		DependabotAlertsAvailable:          dependabotAlertsAvailable,
+		DependabotSecurityUpdatesAvailable: dependabotSecurityUpdatesAvailable,
 	}, nil
 }
 

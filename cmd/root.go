@@ -18,10 +18,12 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	// Add persistent flags that are common to all commands
-	rootCmd.PersistentFlags().StringP("org-list", "o", "", "Path to CSV file containing organization names to target (one per line, no header)")
+	rootCmd.PersistentFlags().StringP("org-list", "l", "", "Path to CSV file containing organization names to target (one per line, no header)")
 	rootCmd.PersistentFlags().IntP("concurrency", "c", 1, "Number of concurrent requests (1-20)")
 	rootCmd.PersistentFlags().StringP("enterprise-slug", "e", "", "GitHub Enterprise slug (e.g., github)")
 	rootCmd.PersistentFlags().StringP("github-enterprise-server-url", "u", "", "GitHub Enterprise Server URL (e.g., github.company.com)")
+	rootCmd.PersistentFlags().StringP("dependabot-alerts-available", "a", "", "Whether Dependabot Alerts are available in your GHES instance (true/false)")
+	rootCmd.PersistentFlags().StringP("dependabot-security-updates-available", "s", "", "Whether Dependabot Security Updates are available in your GHES instance (true/false)")
 
 	// Add subcommands
 	rootCmd.AddCommand(generateCmd)

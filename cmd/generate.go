@@ -22,7 +22,7 @@ var generateCmd = &cobra.Command{
 func init() {
 	// Command-specific flags
 	generateCmd.Flags().BoolP("force", "f", false, "Force deletion of existing configurations with the same name before creating new ones")
-	generateCmd.Flags().StringP("copy-from-org", "r", "", "Organization name to copy an existing configuration from")
+	generateCmd.Flags().StringP("copy-from-org", "o", "", "Organization name to copy an existing configuration from")
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
@@ -82,6 +82,17 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	// Set hostname if using GitHub Enterprise Server
 	ui.SetupGitHubHost(serverURL)
 
+	// Check Dependabot availability
+	dependabotAlertsAvailable, err := ui.GetDependabotAlertsAvailability(commonFlags.DependabotAlertsAvailable)
+	if err != nil {
+		return err
+	}
+
+	dependabotSecurityUpdatesAvailable, err := ui.GetDependabotSecurityUpdatesAvailability(commonFlags.DependabotSecurityUpdatesAvailable)
+	if err != nil {
+		return err
+	}
+
 	// Fetch organizations (from CSV or enterprise API)
 	orgs, err := api.GetOrganizations(enterprise, commonFlags.OrgListPath)
 	if err != nil {
@@ -129,7 +140,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		settings, err = ui.GetSecuritySettings()
+		settings, err = ui.GetSecuritySettings(dependabotAlertsAvailable, dependabotSecurityUpdatesAvailable)
 		if err != nil {
 			return err
 		}

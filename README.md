@@ -3,7 +3,7 @@
 A GitHub CLI extension to create and apply security configurations across many organizations in a GitHub Enterprise.
 
 > [!NOTE]
-> This extension is intended for GitHub Enterprise Server (GHES) 3.15 and currently only supports configuring GitHub Advanced Security and Secret Scanning features as part of a security configuration. For GHES 3.16+ and GitHub Enterprise Cloud (GHEC) it's recommended to use [Enterprise Security Configurations](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-code-security/securing-your-enterprise/about-security-configurations) instead of this solution.
+> This extension is intended for GitHub Enterprise Server (GHES) 3.15 and supports configuring GitHub Advanced Security, Secret Scanning, and Dependabot features as part of a security configuration. For GHES 3.16+ and GitHub Enterprise Cloud (GHEC) it's recommended to use [Enterprise Security Configurations](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-code-security/securing-your-enterprise/about-security-configurations) instead of this solution.
 
 ## Pre-requisites
 
@@ -46,16 +46,18 @@ The extension provides four main commands for managing security configurations a
 
 These flags are available on all commands:
 
-- **`--org-list string`** (`-o`) - Path to CSV file containing organization names to target (one per line, no header)
+- **`--org-list string`** (`-l`) - Path to CSV file containing organization names to target (one per line, no header)
 - **`--concurrency int`** (`-c`) - Number of concurrent requests (1-20, default: 1)
 - **`--enterprise-slug string`** (`-e`) - GitHub Enterprise slug (e.g., github). Skips interactive prompt when provided
-- **`--github-enterprise-server-url string`** (`-u`) - GitHub Enterprise Server URL (e.g., github.company.com). When provided, assumes GitHub Enterprise Server (not GitHub.com)
+- **`--github-enterprise-server-url string`** (`-u`) - GitHub Enterprise Server URL (e.g., github.company.com). Skips interactive prompt when provided
+- **`--dependabot-alerts-available string`** (`-a`) - Whether Dependabot Alerts are available in your GHES instance (true/false). Skips interactive prompt when provided
+- **`--dependabot-security-updates-available string`** (`-s`) - Whether Dependabot Security Updates are available in your GHES instance (true/false). Skips interactive prompt when provided
 
 ### Generate Command Flags
 
 The `generate` command has additional flags:
 
-- **`--copy-from-org string`** (`-r`) - Organization name to copy an existing configuration from
+- **`--copy-from-org string`** (`-o`) - Organization name to copy an existing configuration from
 - **`--force`** (`-f`) - Force deletion of existing configurations with the same name before creating new ones
 
 ### Basic Usage Examples
@@ -67,14 +69,14 @@ gh security-config generate
 # Apply an existing security configuration to repositories
 gh security-config apply
 
-# Delete a security configuration interactively
-gh security-config delete
-
 # Modify a security configuration interactively
 gh security-config modify
 
+# Delete a security configuration interactively
+gh security-config delete
+
 # Use flags to skip interactive prompts
-gh security-config generate -e my-enterprise -u github.mycompany.com
+gh security-config generate -e my-enterprise -u github.mycompany.com -a true -s false
 ```
 
 ### Organization Targeting
@@ -111,7 +113,7 @@ All commands support concurrent requests using the `--concurrency` flag to impro
 
 - **Default**: `1` (sequential processing, maintains existing behavior)
 - **Range**: `1-20` (validated to prevent excessive API usage)
-- **Usage**: Available on all commands (`generate`, `apply`, `delete`, `modify`)
+- **Usage**: Available on all commands (`generate`, `apply`, `modify`, `delete`)
 
 #### Performance Benefits
 
@@ -121,6 +123,17 @@ All commands support concurrent requests using the `--concurrency` flag to impro
 
 > [!WARNING]
 > **Rate Limiting Considerations**: Setting concurrency higher than 1 increases the likelihood of encountering GitHub's secondary rate limits. To avoid rate limiting issues, consider [exempting the user from rate limits](https://docs.github.com/en/enterprise-server@3.15/admin/administering-your-instance/administering-your-instance-from-the-command-line/command-line-utilities#ghe-config).
+
+### Error Handling and Requirements
+
+#### Dependabot Feature Availability
+
+Dependabot Alerts and Security Updates have different availability requirements:
+
+- **Dependabot Alerts**: Available when GitHub Connect, Dependency Graph, and Dependabot are enabled
+- **Dependabot Security Updates**: Available when Dependabot Alerts and GitHub Actions are enabled
+
+**Checking Availability**: Navigate to `Enterprise settings` → `Settings` → `Code security and analysis` to verify which features are available.
 
 ### Apply Security Configurations
 
@@ -152,8 +165,10 @@ The extension will guide you through:
 1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
 2. **Configuration Selection**: Specify the name of the security configuration to modify
 3. **Current Settings Display**: View the current configuration settings and description
-4. **Settings Update**: Interactively update each security setting with options to keep current values
-5. **Confirmation**: Review the changes and confirm modification before execution
+4. **Name Update**: Update the configuration name (optional)
+5. **Description Update**: Update the configuration description (optional)
+6. **Settings Update**: Interactively update each security setting with options to keep current values
+7. **Confirmation**: Review the changes and confirm modification before execution
 
 > [!NOTE]
 > The modify operation will update the specified security configuration across ALL organizations in the enterprise where it exists. Organizations without the configuration will be skipped.
@@ -165,6 +180,8 @@ The extension allows you to set the following features within the security confi
 | Setting | Description | Options |
 |---------|-------------|---------|
 | GitHub Advanced Security | The enablement status of GitHub Advanced Security | `enabled`, `disabled` |
+| Dependabot Alerts | Detect vulnerable dependencies | `enabled`, `disabled`, `not_set` |
+| Dependabot Security Updates | Automatically create pull requests to update vulnerable dependencies | `enabled`, `disabled`, `not_set` |
 | Secret Scanning | Detect secrets in code | `enabled`, `disabled`, `not_set` |
 | Secret Scanning Push Protection | Block commits with secrets | `enabled`, `disabled`, `not_set` |
 | Secret Scanning Non-Provider Patterns | Scan for [non-provider patterns](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/using-advanced-secret-scanning-and-push-protection-features/non-provider-patterns) | `enabled`, `disabled`, `not_set` |

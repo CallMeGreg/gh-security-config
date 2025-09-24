@@ -73,7 +73,7 @@ func ConfirmDeleteOperation(orgs []string, configName string) (bool, error) {
 }
 
 // ConfirmModifyOperation shows modify summary and asks for confirmation
-func ConfirmModifyOperation(orgs []string, configName, currentDescription, newDescription string, currentSettings, newSettings map[string]interface{}) (bool, error) {
+func ConfirmModifyOperation(orgs []string, configName, newName, currentDescription, newDescription string, currentSettings, newSettings map[string]interface{}) (bool, error) {
 	pterm.Println()
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgYellow)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Println("MODIFY OPERATION SUMMARY")
 
@@ -83,6 +83,13 @@ func ConfirmModifyOperation(orgs []string, configName, currentDescription, newDe
 
 	// Show changes
 	pterm.Info.Println("Changes to be made:")
+
+	// Name changes
+	if configName != newName {
+		pterm.Printf("  Name: %s → %s\n", pterm.Red(configName), pterm.Green(newName))
+	} else {
+		pterm.Printf("  Name: %s (no change)\n", pterm.Yellow(configName))
+	}
 
 	// Description changes
 	if currentDescription != newDescription {

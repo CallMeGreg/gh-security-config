@@ -20,6 +20,8 @@ type ConcurrentProcessor struct {
 	successCount  int
 	skippedCount  int
 	errorCount    int
+	stopSignal    chan struct{}
+	stopped       bool
 }
 
 // NewConcurrentProcessor creates a new concurrent processor
@@ -28,6 +30,7 @@ func NewConcurrentProcessor(organizations []string, processor OrganizationProces
 		organizations: organizations,
 		processor:     processor,
 		concurrency:   concurrency,
+		stopSignal:    make(chan struct{}),
 	}
 }
 
@@ -66,8 +69,10 @@ func (cp *ConcurrentProcessor) Process() (successCount, skippedCount, errorCount
 	}()
 
 	// Collect results and handle special error cases
+	resultsProcessed := 0
 	for result := range resultChan {
 		cp.mu.Lock()
+		resultsProcessed++
 		cp.progressBar.UpdateTitle(fmt.Sprintf("Processed %s", result.Organization))
 
 		if result.Success {
@@ -85,7 +90,37 @@ func (cp *ConcurrentProcessor) Process() (successCount, skippedCount, errorCount
 				cp.skippedCount++
 				cp.errorCount-- // Don't count this as an error
 			} else {
-				pterm.Error.Printf("Failed to process organization '%s': %v\n", result.Organization, result.Error)
+				// Check if this is a Dependabot unavailable error (422)
+				var dependabotErr *types.DependabotUnavailableError
+				if errors.As(result.Error, &dependabotErr) {
+					pterm.Error.Printf("Dependabot feature unavailable: %v\n", result.Error)
+					pterm.Error.Println("Stopping processing of remaining organizations due to Dependabot unavailability.")
+					pterm.Error.Println("Please remove Dependabot settings from your configuration or enable Dependabot on your GHES instance.")
+
+					// Signal all workers to stop
+					if !cp.stopped {
+						cp.stopped = true
+						close(cp.stopSignal)
+					}
+
+					// Update progress bar to reflect remaining organizations as skipped
+					remainingOrgs := totalOrgs - resultsProcessed
+					cp.skippedCount += remainingOrgs
+					cp.progressBar.Add(remainingOrgs)
+
+					cp.mu.Unlock()
+
+					// Drain any remaining results to avoid goroutine leaks
+					go func() {
+						for range resultChan {
+							// Just drain the channel
+						}
+					}()
+
+					break // Exit the result processing loop
+				} else {
+					pterm.Error.Printf("Failed to process organization '%s': %v\n", result.Organization, result.Error)
+				}
 			}
 		}
 
@@ -101,8 +136,16 @@ func (cp *ConcurrentProcessor) Process() (successCount, skippedCount, errorCount
 func (cp *ConcurrentProcessor) worker(wg *sync.WaitGroup, orgChan <-chan string, resultChan chan<- types.ProcessingResult) {
 	defer wg.Done()
 
-	for org := range orgChan {
-		result := cp.processor.ProcessOrganization(org)
-		resultChan <- result
+	for {
+		select {
+		case org, ok := <-orgChan:
+			if !ok {
+				return // Channel closed, exit worker
+			}
+			result := cp.processor.ProcessOrganization(org)
+			resultChan <- result
+		case <-cp.stopSignal:
+			return // Stop signal received, exit worker
+		}
 	}
 }

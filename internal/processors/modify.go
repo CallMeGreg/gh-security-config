@@ -12,6 +12,7 @@ import (
 // ModifyProcessor implements OrganizationProcessor for the modify command
 type ModifyProcessor struct {
 	ConfigName     string
+	NewName        string
 	NewDescription string
 	NewSettings    map[string]interface{}
 }
@@ -51,7 +52,7 @@ func (mp *ModifyProcessor) modifyConfigurationInOrg(org string) (bool, error) {
 	}
 
 	// Update the configuration
-	err = api.UpdateSecurityConfiguration(org, configID, mp.NewDescription, mp.NewSettings)
+	err = api.UpdateSecurityConfiguration(org, configID, mp.NewName, mp.NewDescription, mp.NewSettings)
 	if err != nil {
 		return false, fmt.Errorf("failed to update security configuration: %w", err)
 	}
