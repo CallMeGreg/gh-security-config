@@ -9,8 +9,9 @@ import (
 
 // GetCommonFlags extracts common flags used across all commands
 type CommonFlags struct {
-	OrgListPath string
-	Concurrency int
+	OrgListPath         string
+	Concurrency         int
+	DependabotAvailable *bool
 }
 
 // ExtractCommonFlags gets org-list and concurrency flags from command
@@ -25,9 +26,28 @@ func ExtractCommonFlags(cmd *cobra.Command) (*CommonFlags, error) {
 		return nil, err
 	}
 
+	dependabotAvailableFlag, err := cmd.Flags().GetString("dependabot-available")
+	if err != nil {
+		return nil, err
+	}
+
+	var dependabotAvailable *bool
+	if dependabotAvailableFlag != "" {
+		if dependabotAvailableFlag == "true" {
+			val := true
+			dependabotAvailable = &val
+		} else if dependabotAvailableFlag == "false" {
+			val := false
+			dependabotAvailable = &val
+		} else {
+			return nil, fmt.Errorf("invalid value for dependabot-available flag: %s (must be 'true' or 'false')", dependabotAvailableFlag)
+		}
+	}
+
 	return &CommonFlags{
-		OrgListPath: orgListPath,
-		Concurrency: concurrency,
+		OrgListPath:         orgListPath,
+		Concurrency:         concurrency,
+		DependabotAvailable: dependabotAvailable,
 	}, nil
 }
 

@@ -28,29 +28,43 @@ func GetEnterpriseInput(enterpriseFlag string) (string, error) {
 	return strings.TrimSpace(enterprise), nil
 }
 
-// GetServerURLInput prompts for GitHub Enterprise Server URL if needed or uses provided value
+// GetServerURLInput prompts for GitHub Enterprise Server URL (assumes GHES since this tool is GHES-only)
 func GetServerURLInput(serverURLFlag string) (string, error) {
-	// If server URL is provided via flag, use it and assume GHES
+	// If server URL is provided via flag, use it
 	if strings.TrimSpace(serverURLFlag) != "" {
 		return strings.TrimSpace(serverURLFlag), nil
 	}
 
-	// Otherwise, prompt for GHES confirmation and URL
-	isGHES, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Are you using GitHub Enterprise Server (not GitHub.com)?").WithDefaultValue(true).Show()
-	if err != nil {
-		return "", err
-	}
-
-	if !isGHES {
-		return "", nil
-	}
-
+	// Since this tool is GHES-only, always prompt for server URL
 	serverURL, err := pterm.DefaultInteractiveTextInput.WithDefaultText("").WithMultiLine(false).Show("Enter your GitHub Enterprise Server URL (e.g., github.company.com)")
 	if err != nil {
 		return "", err
 	}
 
+	if strings.TrimSpace(serverURL) == "" {
+		return "", fmt.Errorf("GitHub Enterprise Server URL is required")
+	}
+
 	return strings.TrimSpace(serverURL), nil
+}
+
+// GetDependabotAvailability prompts for Dependabot availability or uses provided value
+func GetDependabotAvailability(dependabotAvailable *bool) (bool, error) {
+	// If Dependabot availability is provided via flag, use it
+	if dependabotAvailable != nil {
+		return *dependabotAvailable, nil
+	}
+
+	// Otherwise, prompt for Dependabot availability
+	pterm.Info.Println("To configure Dependabot settings, GitHub Connect and Dependabot must be enabled in your instance.")
+	pterm.Info.Println("You can confirm this by navigating to: Enterprise settings → GitHub Connect → Dependabot")
+
+	isAvailable, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Is Dependabot available in your instance?").WithDefaultValue(false).Show()
+	if err != nil {
+		return false, err
+	}
+
+	return isAvailable, nil
 }
 
 // SetupGitHubHost sets the GH_HOST environment variable if using GitHub Enterprise Server

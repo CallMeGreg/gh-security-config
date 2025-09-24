@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/cli/go-gh/v2"
 	"github.com/pterm/pterm"
@@ -59,7 +60,8 @@ func GetSecurityConfigurationDetails(org string, configID int) (*types.SecurityC
 
 	// Extract security settings
 	securitySettings := []string{
-		"advanced_security", "secret_scanning", "secret_scanning_push_protection",
+		"advanced_security", "dependabot_alerts", "dependabot_security_updates",
+		"secret_scanning", "secret_scanning_push_protection",
 		"secret_scanning_non_provider_patterns", "enforcement",
 	}
 
@@ -118,6 +120,12 @@ func CreateSecurityConfiguration(org, name, description string, settings map[str
 	if err != nil {
 		pterm.Error.Printf("Failed to create security configuration for org '%s': %v\n", org, err)
 		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
+
+		// Check for 422 status code related to Dependabot unavailability
+		if apiErr := parseAPIError(stderr.String(), org, settings); apiErr != nil {
+			return 0, apiErr
+		}
+
 		return 0, err
 	}
 
@@ -130,9 +138,10 @@ func CreateSecurityConfiguration(org, name, description string, settings map[str
 }
 
 // UpdateSecurityConfiguration updates an existing security configuration
-func UpdateSecurityConfiguration(org string, configID int, description string, settings map[string]interface{}) error {
+func UpdateSecurityConfiguration(org string, configID int, name, description string, settings map[string]interface{}) error {
 	// Build the request body for PATCH request
 	body := map[string]interface{}{
+		"name":        name,
 		"description": description,
 	}
 
@@ -236,4 +245,28 @@ func SetConfigurationAsDefault(org string, configID int) error {
 
 	_, _, err = gh.Exec("api", "--method", "PUT", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/orgs/%s/code-security/configurations/%d/defaults", org, configID), "--input", tmpFile.Name())
 	return err
+}
+
+// parseAPIError checks for 422 status codes related to Dependabot unavailability
+func parseAPIError(stderr string, org string, settings map[string]interface{}) error {
+	if strings.Contains(stderr, "422") {
+		// Check if Dependabot settings are being configured
+		if val, hasDependabotAlerts := settings["dependabot_alerts"]; hasDependabotAlerts {
+			if val != "not_set" && val != "disabled" {
+				return &types.DependabotUnavailableError{
+					Feature: "alerts",
+					OrgName: org,
+				}
+			}
+		}
+		if val, hasDependabotUpdates := settings["dependabot_security_updates"]; hasDependabotUpdates {
+			if val != "not_set" && val != "disabled" {
+				return &types.DependabotUnavailableError{
+					Feature: "security updates",
+					OrgName: org,
+				}
+			}
+		}
+	}
+	return nil
 }

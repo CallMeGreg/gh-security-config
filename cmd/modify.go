@@ -65,6 +65,12 @@ func runModify(cmd *cobra.Command, args []string) error {
 	// Set hostname if using GitHub Enterprise Server
 	ui.SetupGitHubHost(serverURL)
 
+	// Check Dependabot availability
+	dependabotAvailable, err := ui.GetDependabotAvailability(commonFlags.DependabotAvailable)
+	if err != nil {
+		return err
+	}
+
 	// Fetch organizations (from CSV or enterprise API)
 	orgs, err := api.GetOrganizations(enterprise, commonFlags.OrgListPath)
 	if err != nil {
@@ -119,6 +125,12 @@ func runModify(cmd *cobra.Command, args []string) error {
 	ui.DisplayCurrentSettings(currentSettings, currentDescription)
 	pterm.Println()
 
+	// Get new name
+	newName, err := ui.GetUpdatedName(configName)
+	if err != nil {
+		return err
+	}
+
 	// Get new description
 	newDescription, err := ui.GetUpdatedDescription(currentDescription)
 	if err != nil {
@@ -126,13 +138,13 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get updated security settings
-	newSettings, err := ui.GetSecuritySettingsForUpdate(currentSettings)
+	newSettings, err := ui.GetSecuritySettingsForUpdate(currentSettings, dependabotAvailable)
 	if err != nil {
 		return err
 	}
 
 	// Confirm before proceeding
-	confirmed, err := ui.ConfirmModifyOperation(orgs, configName, currentDescription, newDescription, currentSettings, newSettings)
+	confirmed, err := ui.ConfirmModifyOperation(orgs, configName, newName, currentDescription, newDescription, currentSettings, newSettings)
 	if err != nil {
 		return err
 	}
@@ -148,6 +160,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	// Create processor for modify command
 	processor := &processors.ModifyProcessor{
 		ConfigName:     configName,
+		NewName:        newName,
 		NewDescription: newDescription,
 		NewSettings:    newSettings,
 	}

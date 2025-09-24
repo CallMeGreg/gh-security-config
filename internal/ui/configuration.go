@@ -33,7 +33,7 @@ func GetSecurityConfigInput() (string, string, error) {
 }
 
 // GetSecuritySettings prompts for security settings configuration
-func GetSecuritySettings() (map[string]interface{}, error) {
+func GetSecuritySettings(dependabotAvailable bool) (map[string]interface{}, error) {
 	settings := make(map[string]interface{})
 
 	pterm.Info.Println("Configure security settings:")
@@ -44,6 +44,23 @@ func GetSecuritySettings() (map[string]interface{}, error) {
 		return nil, err
 	}
 	settings["advanced_security"] = advancedSecurity
+
+	// Dependabot settings (only if available)
+	if dependabotAvailable {
+		// Dependabot Alerts
+		dependabotAlerts, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("not_set").Show("Dependabot Alerts")
+		if err != nil {
+			return nil, err
+		}
+		settings["dependabot_alerts"] = dependabotAlerts
+
+		// Dependabot Security Updates
+		dependabotSecurityUpdates, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("not_set").Show("Dependabot Security Updates")
+		if err != nil {
+			return nil, err
+		}
+		settings["dependabot_security_updates"] = dependabotSecurityUpdates
+	}
 
 	// Secret Scanning
 	secretScanning, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("enabled").Show("Secret Scanning")
@@ -60,7 +77,7 @@ func GetSecuritySettings() (map[string]interface{}, error) {
 	settings["secret_scanning_push_protection"] = pushProtection
 
 	// Secret Scanning Non-Provider Patterns
-	nonProviderPatterns, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("disabled").Show("Secret Scanning Non-Provider Patterns")
+	nonProviderPatterns, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("not_set").Show("Secret Scanning Non-Provider Patterns")
 	if err != nil {
 		return nil, err
 	}
@@ -129,6 +146,21 @@ func GetConfigNameForModification() (string, error) {
 	return strings.TrimSpace(configName), nil
 }
 
+// GetUpdatedName prompts for updated configuration name
+func GetUpdatedName(currentName string) (string, error) {
+	newName, err := pterm.DefaultInteractiveTextInput.WithDefaultText(currentName).WithMultiLine(false).Show("Enter updated security configuration name")
+	if err != nil {
+		return "", err
+	}
+
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		return "", fmt.Errorf("configuration name is required")
+	}
+
+	return newName, nil
+}
+
 // GetUpdatedDescription prompts for updated description
 func GetUpdatedDescription(currentDescription string) (string, error) {
 	newDescription, err := pterm.DefaultInteractiveTextInput.WithDefaultText(currentDescription).WithMultiLine(false).Show("Enter updated security configuration description")
@@ -140,25 +172,33 @@ func GetUpdatedDescription(currentDescription string) (string, error) {
 }
 
 // GetSecuritySettingsForUpdate prompts for updated security settings
-func GetSecuritySettingsForUpdate(currentSettings map[string]interface{}) (map[string]interface{}, error) {
+func GetSecuritySettingsForUpdate(currentSettings map[string]interface{}, dependabotAvailable bool) (map[string]interface{}, error) {
 	newSettings := make(map[string]interface{})
 
 	pterm.Info.Println("Update security settings (press Enter to keep current value):")
 
 	settingsConfig := []struct {
-		key          string
-		description  string
-		options      []string
-		defaultValue string
+		key                string
+		description        string
+		options            []string
+		defaultValue       string
+		requiresDependabot bool
 	}{
-		{"advanced_security", "GitHub Advanced Security", []string{"enabled", "disabled"}, "enabled"},
-		{"secret_scanning", "Secret Scanning", []string{"enabled", "disabled", "not_set"}, "enabled"},
-		{"secret_scanning_push_protection", "Secret Scanning Push Protection", []string{"enabled", "disabled", "not_set"}, "enabled"},
-		{"secret_scanning_non_provider_patterns", "Secret Scanning Non-Provider Patterns", []string{"enabled", "disabled", "not_set"}, "disabled"},
-		{"enforcement", "Enforcement Status", []string{"enforced", "unenforced"}, "enforced"},
+		{"advanced_security", "GitHub Advanced Security", []string{"enabled", "disabled"}, "enabled", false},
+		{"dependabot_alerts", "Dependabot Alerts", []string{"enabled", "disabled", "not_set"}, "not_set", true},
+		{"dependabot_security_updates", "Dependabot Security Updates", []string{"enabled", "disabled", "not_set"}, "not_set", true},
+		{"secret_scanning", "Secret Scanning", []string{"enabled", "disabled", "not_set"}, "enabled", false},
+		{"secret_scanning_push_protection", "Secret Scanning Push Protection", []string{"enabled", "disabled", "not_set"}, "enabled", false},
+		{"secret_scanning_non_provider_patterns", "Secret Scanning Non-Provider Patterns", []string{"enabled", "disabled", "not_set"}, "not_set", false},
+		{"enforcement", "Enforcement Status", []string{"enforced", "unenforced"}, "enforced", false},
 	}
 
 	for _, config := range settingsConfig {
+		// Skip Dependabot settings if not available
+		if config.requiresDependabot && !dependabotAvailable {
+			continue
+		}
+
 		currentValue := "not_set"
 		if val, exists := currentSettings[config.key]; exists {
 			currentValue = fmt.Sprintf("%v", val)
