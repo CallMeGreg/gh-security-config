@@ -11,11 +11,12 @@ import (
 type CommonFlags struct {
 	OrgListPath                        string
 	Concurrency                        int
+	Delay                              int
 	DependabotAlertsAvailable          *bool
 	DependabotSecurityUpdatesAvailable *bool
 }
 
-// ExtractCommonFlags gets org-list and concurrency flags from command
+// ExtractCommonFlags gets org-list, concurrency, and delay flags from command
 func ExtractCommonFlags(cmd *cobra.Command) (*CommonFlags, error) {
 	orgListPath, err := cmd.Flags().GetString("org-list")
 	if err != nil {
@@ -23,6 +24,11 @@ func ExtractCommonFlags(cmd *cobra.Command) (*CommonFlags, error) {
 	}
 
 	concurrency, err := cmd.Flags().GetInt("concurrency")
+	if err != nil {
+		return nil, err
+	}
+
+	delay, err := cmd.Flags().GetInt("delay")
 	if err != nil {
 		return nil, err
 	}
@@ -66,6 +72,7 @@ func ExtractCommonFlags(cmd *cobra.Command) (*CommonFlags, error) {
 	return &CommonFlags{
 		OrgListPath:                        orgListPath,
 		Concurrency:                        concurrency,
+		Delay:                              delay,
 		DependabotAlertsAvailable:          dependabotAlertsAvailable,
 		DependabotSecurityUpdatesAvailable: dependabotSecurityUpdatesAvailable,
 	}, nil
