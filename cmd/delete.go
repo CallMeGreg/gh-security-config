@@ -32,8 +32,14 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Validate concurrency
+	// Validate concurrency and delay flags
 	if err := utils.ValidateConcurrency(commonFlags.Concurrency); err != nil {
+		return err
+	}
+	if err := utils.ValidateDelay(commonFlags.Delay); err != nil {
+		return err
+	}
+	if err := utils.ValidateConcurrencyAndDelay(commonFlags.Concurrency, commonFlags.Delay); err != nil {
 		return err
 	}
 
@@ -91,17 +97,22 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Process each organization
-	ui.ShowProcessingStart(len(orgs), commonFlags.Concurrency)
-
 	// Create processor for delete command
 	processor := &processors.DeleteProcessor{
 		ConfigName: configName,
 	}
 
-	// Use concurrent processor
-	concurrentProcessor := processors.NewConcurrentProcessor(orgs, processor, commonFlags.Concurrency)
-	successCount, skippedCount, errorCount := concurrentProcessor.Process()
+	// Process each organization - use sequential processor if delay is specified
+	var successCount, skippedCount, errorCount int
+	if commonFlags.Delay > 0 {
+		ui.ShowProcessingStartWithDelay(len(orgs), commonFlags.Delay)
+		sequentialProcessor := processors.NewSequentialProcessor(orgs, processor, commonFlags.Delay)
+		successCount, skippedCount, errorCount = sequentialProcessor.Process()
+	} else {
+		ui.ShowProcessingStart(len(orgs), commonFlags.Concurrency)
+		concurrentProcessor := processors.NewConcurrentProcessor(orgs, processor, commonFlags.Concurrency)
+		successCount, skippedCount, errorCount = concurrentProcessor.Process()
+	}
 
 	utils.PrintCompletionHeader("Security Configuration Deletion", successCount, skippedCount, errorCount)
 

@@ -48,6 +48,7 @@ These flags are available on all commands:
 
 - **`--org-list string`** (`-l`) - Path to CSV file containing organization names to target (one per line, no header)
 - **`--concurrency int`** (`-c`) - Number of concurrent requests (1-20, default: 1)
+- **`--delay int`** (`-d`) - Delay in seconds between organizations (1-600, mutually exclusive with `--concurrency`)
 - **`--enterprise-slug string`** (`-e`) - GitHub Enterprise slug (e.g., github). Skips interactive prompt when provided
 - **`--github-enterprise-server-url string`** (`-u`) - GitHub Enterprise Server URL (e.g., github.company.com). Skips interactive prompt when provided
 - **`--dependabot-alerts-available string`** (`-a`) - Whether Dependabot Alerts are available in your GHES instance (true/false). Skips interactive prompt when provided
@@ -77,6 +78,12 @@ gh security-config delete
 
 # Use flags to skip interactive prompts
 gh security-config generate -e my-enterprise -u github.mycompany.com -a true -s false
+
+# Use concurrent processing for faster execution (up to 20 organizations at once)
+gh security-config generate --concurrency 5
+
+# Use delayed processing to avoid rate limits and reduce system overhead (30 second delay between organizations)
+gh security-config generate --delay 30
 ```
 
 ### Organization Targeting
@@ -107,19 +114,38 @@ The `--copy-from-org` flag allows you to copy an existing security configuration
 
 ### Concurrency and Performance
 
-All commands support concurrent requests using the `--concurrency` flag to improve performance when working with many organizations.
+All commands support two execution modes for processing multiple organizations:
 
-#### Concurrency Settings
+#### Concurrent Processing (`--concurrency`)
+
+Process multiple organizations simultaneously to improve performance:
 
 - **Default**: `1` (sequential processing, maintains existing behavior)
 - **Range**: `1-20` (validated to prevent excessive API usage)
 - **Usage**: Available on all commands (`generate`, `apply`, `modify`, `delete`)
+- **Benefits**: Significantly reduces total processing time for large numbers of organizations
+
+#### Sequential Processing with Delay (`--delay`)
+
+Process organizations one at a time with a configurable delay between each:
+
+- **Range**: `1-600` seconds (validated to prevent unreasonable delays)
+- **Usage**: Available on all commands (`generate`, `apply`, `modify`, `delete`)
+- **Benefits**: Helps avoid rate limiting issues and provides controlled processing pace
+
+#### Mutual Exclusivity
+
+The `--concurrency` and `--delay` flags are mutually exclusive:
+
+- **Cannot use both**: You must choose either concurrent processing OR sequential processing with delay
+- **Default behavior**: When neither flag is specified, processing runs sequentially without delay (concurrency=1, delay=0)
 
 #### Performance Benefits
 
-- **Faster Execution**: Significantly reduces total processing time for large numbers of organizations
-- **Configurable**: Choose concurrency level based on your needs and environment
-- **Progress Tracking**: Real-time progress updates work seamlessly with concurrent processing
+- **Concurrent Mode**: Faster execution for time-sensitive operations
+- **Delayed Mode**: Better for rate limit management and controlled processing
+- **Configurable**: Choose the mode based on your needs and environment constraints
+- **Progress Tracking**: Real-time progress updates work seamlessly with both processing modes
 
 > [!WARNING]
 > **Rate Limiting Considerations**: Setting concurrency higher than 1 increases the likelihood of encountering GitHub's secondary rate limits. To avoid rate limiting issues, consider [exempting the user from rate limits](https://docs.github.com/en/enterprise-server@3.15/admin/administering-your-instance/administering-your-instance-from-the-command-line/command-line-utilities#ghe-config).

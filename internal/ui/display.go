@@ -46,3 +46,8 @@ func ShowOperationCancelled() {
 func ShowProcessingStart(orgCount, concurrency int) {
 	pterm.Info.Printf("Processing %d organizations with concurrency %d...\n", orgCount, concurrency)
 }
+
+// ShowProcessingStartWithDelay displays the start of processing with delay info
+func ShowProcessingStartWithDelay(orgCount, delay int) {
+	pterm.Info.Printf("Processing %d organizations sequentially with %d second delay between organizations...\n", orgCount, delay)
+}
