@@ -12,7 +12,7 @@ func ValidateConcurrency(concurrency int) error {
 
 // ValidateDelay validates the delay flag value
 func ValidateDelay(delay int) error {
-	if delay != 0 && (delay < 1 || delay > 600) {
+	if delay < 0 || delay > 600 {
 		return fmt.Errorf("delay must be between 1 and 600 seconds, got %d", delay)
 	}
 	return nil
