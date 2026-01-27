@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/cli/go-gh/v2"
@@ -271,4 +272,79 @@ func parseAPIError(stderr string, org string, settings map[string]interface{}) e
 		}
 	}
 	return nil
+}
+
+// FetchEnterpriseSecurityConfigurations retrieves all security configurations for an enterprise
+// This endpoint is available in GHES 3.17+
+func FetchEnterpriseSecurityConfigurations(enterprise string) ([]types.SecurityConfiguration, error) {
+	response, stderr, err := gh.Exec("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/enterprises/%s/code-security/configurations", enterprise))
+	if err != nil {
+		pterm.Error.Printf("Failed to fetch enterprise security configurations for '%s': %v\n", enterprise, err)
+		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
+		return nil, err
+	}
+
+	var configs []types.SecurityConfiguration
+	if err := json.Unmarshal(response.Bytes(), &configs); err != nil {
+		return nil, err
+	}
+
+	return configs, nil
+}
+
+// SupportsEnterpriseConfigurations checks if the GHES version supports enterprise-level security configurations
+// Enterprise configurations are available in GHES 3.17+
+func SupportsEnterpriseConfigurations(ghesVersion string) bool {
+	// Parse version number
+	versionFloat, err := strconv.ParseFloat(ghesVersion, 64)
+	if err != nil {
+		return false
+	}
+	return versionFloat >= 3.17
+}
+
+// GetEnterpriseSecurityConfigurationDetails retrieves detailed information about an enterprise security configuration
+func GetEnterpriseSecurityConfigurationDetails(enterprise string, configID int) (*types.SecurityConfigurationDetails, error) {
+	response, stderr, err := gh.Exec("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", fmt.Sprintf("/enterprises/%s/code-security/configurations/%d", enterprise, configID))
+	if err != nil {
+		pterm.Error.Printf("Failed to fetch enterprise security configuration details: %v\n", err)
+		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
+		return nil, err
+	}
+
+	var configResponse map[string]interface{}
+	if err := json.Unmarshal(response.Bytes(), &configResponse); err != nil {
+		return nil, err
+	}
+
+	details := &types.SecurityConfigurationDetails{
+		Settings:   make(map[string]interface{}),
+		TargetType: "enterprise",
+	}
+
+	// Extract basic info
+	if id, ok := configResponse["id"].(float64); ok {
+		details.ID = int(id)
+	}
+	if name, ok := configResponse["name"].(string); ok {
+		details.Name = name
+	}
+	if desc, ok := configResponse["description"].(string); ok {
+		details.Description = desc
+	}
+
+	// Extract security settings
+	securitySettings := []string{
+		"advanced_security", "dependabot_alerts", "dependabot_security_updates",
+		"secret_scanning", "secret_scanning_push_protection",
+		"secret_scanning_non_provider_patterns", "enforcement",
+	}
+
+	for _, setting := range securitySettings {
+		if val, exists := configResponse[setting]; exists {
+			details.Settings[setting] = val
+		}
+	}
+
+	return details, nil
 }

@@ -86,6 +86,29 @@ func GetDependabotSecurityUpdatesAvailability(dependabotSecurityUpdatesAvailable
 	return isAvailable, nil
 }
 
+// GetGHESVersionInput prompts for GHES version or uses provided value
+func GetGHESVersionInput(ghesVersionFlag string) (string, error) {
+	// If GHES version is provided via flag, use it
+	if strings.TrimSpace(ghesVersionFlag) != "" {
+		return strings.TrimSpace(ghesVersionFlag), nil
+	}
+
+	// Prompt for GHES version
+	version, err := pterm.DefaultInteractiveSelect.WithOptions([]string{
+		"3.15",
+		"3.16",
+		"3.17",
+		"3.18",
+		"3.19",
+		"3.20",
+	}).WithDefaultOption("3.17").Show("Select your GitHub Enterprise Server version")
+	if err != nil {
+		return "", err
+	}
+
+	return version, nil
+}
+
 // SetupGitHubHost sets the GH_HOST environment variable if using GitHub Enterprise Server
 func SetupGitHubHost(serverURL string) {
 	if serverURL != "" {

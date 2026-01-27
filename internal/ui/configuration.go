@@ -242,6 +242,51 @@ func GetConfigNameForApplication() (string, error) {
 	return strings.TrimSpace(configName), nil
 }
 
+// SelectConfigurationFromList prompts user to select a configuration from a list
+// Returns the configuration name and target type (organization or enterprise)
+func SelectConfigurationFromList(orgConfigs, enterpriseConfigs []string) (string, string, error) {
+	if len(orgConfigs) == 0 && len(enterpriseConfigs) == 0 {
+		return "", "", fmt.Errorf("no configurations available")
+	}
+
+	// Build options list with prefixes to indicate source
+	var options []string
+	configMap := make(map[string]struct {
+		name       string
+		targetType string
+	})
+
+	for _, name := range enterpriseConfigs {
+		option := fmt.Sprintf("[Enterprise] %s", name)
+		options = append(options, option)
+		configMap[option] = struct {
+			name       string
+			targetType string
+		}{name, "enterprise"}
+	}
+
+	for _, name := range orgConfigs {
+		option := fmt.Sprintf("[Organization] %s", name)
+		options = append(options, option)
+		configMap[option] = struct {
+			name       string
+			targetType string
+		}{name, "organization"}
+	}
+
+	if len(options) == 0 {
+		return "", "", fmt.Errorf("no configurations available")
+	}
+
+	selection, err := pterm.DefaultInteractiveSelect.WithOptions(options).Show("Select a security configuration to apply")
+	if err != nil {
+		return "", "", err
+	}
+
+	config := configMap[selection]
+	return config.name, config.targetType, nil
+}
+
 // GetAttachmentScopeForApplication prompts for repository attachment scope (without 'none' option)
 func GetAttachmentScopeForApplication() (string, error) {
 	scope, err := pterm.DefaultInteractiveSelect.WithOptions([]string{

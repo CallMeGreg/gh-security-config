@@ -11,11 +11,12 @@ import (
 
 // ApplyProcessor implements OrganizationProcessor for the apply command
 type ApplyProcessor struct {
-	ConfigName        string
-	ConfigDescription string
-	Settings          map[string]interface{}
-	Scope             string
-	SetAsDefault      bool
+	ConfigName         string
+	ConfigDescription  string
+	Settings           map[string]interface{}
+	Scope              string
+	SetAsDefault       bool
+	IsEnterpriseConfig bool
 }
 
 // ProcessOrganization processes a single organization for the apply command
@@ -31,7 +32,42 @@ func (ap *ApplyProcessor) ProcessOrganization(org string) types.ProcessingResult
 
 // processOrganization handles the core organization processing logic
 func (ap *ApplyProcessor) processOrganization(org string) types.ProcessingResult {
-	// Check if a configuration with the same name already exists
+	// For enterprise configurations, the config exists at enterprise level
+	// and we just need to attach it to repositories in the org
+	if ap.IsEnterpriseConfig {
+		// Check if the enterprise configuration is visible in this org
+		configs, err := api.FetchSecurityConfigurations(org)
+		if err != nil {
+			return types.ProcessingResult{Organization: org, Error: fmt.Errorf("failed to fetch security configurations: %w", err)}
+		}
+
+		// Find the enterprise configuration by name
+		existingConfigID, exists := api.FindConfigurationByName(configs, ap.ConfigName)
+		if !exists {
+			pterm.Info.Printf("Enterprise configuration '%s' not visible in organization '%s', skipping\n", ap.ConfigName, org)
+			return types.ProcessingResult{Organization: org, Skipped: true}
+		}
+
+		// Attach to repositories if scope is specified
+		if ap.Scope != "" {
+			err = api.AttachConfigurationToRepos(org, existingConfigID, ap.Scope)
+			if err != nil {
+				return types.ProcessingResult{Organization: org, Error: fmt.Errorf("failed to attach configuration to repositories: %w", err)}
+			}
+		}
+
+		// Set as default if requested
+		if ap.SetAsDefault {
+			err = api.SetConfigurationAsDefault(org, existingConfigID)
+			if err != nil {
+				return types.ProcessingResult{Organization: org, Error: fmt.Errorf("failed to set configuration as default: %w", err)}
+			}
+		}
+
+		return types.ProcessingResult{Organization: org, Success: true}
+	}
+
+	// For organization-level configurations, check if it exists
 	configs, err := api.FetchSecurityConfigurations(org)
 	if err != nil {
 		return types.ProcessingResult{Organization: org, Error: fmt.Errorf("failed to fetch existing security configurations: %w", err)}
