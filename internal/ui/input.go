@@ -88,20 +88,22 @@ func GetDependabotSecurityUpdatesAvailability(dependabotSecurityUpdatesAvailable
 
 // GetGHESVersionInput prompts for GHES version or uses provided value
 func GetGHESVersionInput(ghesVersionFlag string) (string, error) {
-	// If GHES version is provided via flag, use it
+	validVersions := []string{"3.15", "3.16", "3.17", "3.18", "3.19", "3.20"}
+
+	// If GHES version is provided via flag, validate and use it
 	if strings.TrimSpace(ghesVersionFlag) != "" {
-		return strings.TrimSpace(ghesVersionFlag), nil
+		version := strings.TrimSpace(ghesVersionFlag)
+		// Validate that it's a supported version
+		for _, validVersion := range validVersions {
+			if version == validVersion {
+				return version, nil
+			}
+		}
+		return "", fmt.Errorf("invalid GHES version '%s'. Supported versions: %s", version, strings.Join(validVersions, ", "))
 	}
 
 	// Prompt for GHES version
-	version, err := pterm.DefaultInteractiveSelect.WithOptions([]string{
-		"3.15",
-		"3.16",
-		"3.17",
-		"3.18",
-		"3.19",
-		"3.20",
-	}).WithDefaultOption("3.17").Show("Select your GitHub Enterprise Server version")
+	version, err := pterm.DefaultInteractiveSelect.WithOptions(validVersions).WithDefaultOption("3.17").Show("Select your GitHub Enterprise Server version")
 	if err != nil {
 		return "", err
 	}

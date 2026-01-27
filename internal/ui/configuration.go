@@ -250,20 +250,12 @@ func SelectConfigurationFromList(orgConfigs, enterpriseConfigs []string) (string
 	}
 
 	// Build options list with prefixes to indicate source
+	// Organization configs first as they are more commonly used
 	var options []string
 	configMap := make(map[string]struct {
 		name       string
 		targetType string
 	})
-
-	for _, name := range enterpriseConfigs {
-		option := fmt.Sprintf("[Enterprise] %s", name)
-		options = append(options, option)
-		configMap[option] = struct {
-			name       string
-			targetType string
-		}{name, "enterprise"}
-	}
 
 	for _, name := range orgConfigs {
 		option := fmt.Sprintf("[Organization] %s", name)
@@ -274,8 +266,13 @@ func SelectConfigurationFromList(orgConfigs, enterpriseConfigs []string) (string
 		}{name, "organization"}
 	}
 
-	if len(options) == 0 {
-		return "", "", fmt.Errorf("no configurations available")
+	for _, name := range enterpriseConfigs {
+		option := fmt.Sprintf("[Enterprise] %s", name)
+		options = append(options, option)
+		configMap[option] = struct {
+			name       string
+			targetType string
+		}{name, "enterprise"}
 	}
 
 	selection, err := pterm.DefaultInteractiveSelect.WithOptions(options).Show("Select a security configuration to apply")

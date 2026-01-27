@@ -59,6 +59,13 @@ func GetSecurityConfigurationDetails(org string, configID int) (*types.SecurityC
 		details.Description = desc
 	}
 
+	// Set TargetType from API response or default to "organization"
+	if targetType, ok := configResponse["target_type"].(string); ok {
+		details.TargetType = targetType
+	} else {
+		details.TargetType = "organization"
+	}
+
 	// Extract security settings
 	securitySettings := []string{
 		"advanced_security", "dependabot_alerts", "dependabot_security_updates",
@@ -287,6 +294,13 @@ func FetchEnterpriseSecurityConfigurations(enterprise string) ([]types.SecurityC
 	var configs []types.SecurityConfiguration
 	if err := json.Unmarshal(response.Bytes(), &configs); err != nil {
 		return nil, err
+	}
+
+	// Ensure all configs have TargetType set to "enterprise"
+	for i := range configs {
+		if configs[i].TargetType == "" {
+			configs[i].TargetType = "enterprise"
+		}
 	}
 
 	return configs, nil

@@ -16,8 +16,11 @@ import (
 var applyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Apply existing security configurations to repositories",
-	Long:  "Interactive command to apply an existing security configuration to specific repositories across organizations in an enterprise",
-	RunE:  runApply,
+	Long: `Interactive command to apply an existing security configuration to specific repositories across organizations in an enterprise.
+
+For GHES 3.17+, this command supports both organization-level and enterprise-level security configurations.
+Use the --ghes-version flag to specify your GitHub Enterprise Server version.`,
+	RunE: runApply,
 }
 
 func init() {
@@ -167,7 +170,10 @@ func runApply(cmd *cobra.Command, args []string) error {
 
 	if targetType == "enterprise" {
 		// Get enterprise configuration details
-		enterpriseConfig := enterpriseConfigMap[configName]
+		enterpriseConfig, exists := enterpriseConfigMap[configName]
+		if !exists {
+			return fmt.Errorf("enterprise configuration '%s' not found in cached configurations", configName)
+		}
 		configDetails, err = api.GetEnterpriseSecurityConfigurationDetails(enterprise, enterpriseConfig.ID)
 		if err != nil {
 			return fmt.Errorf("failed to get enterprise configuration details: %w", err)
