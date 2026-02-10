@@ -49,11 +49,14 @@ jobs:
           
           # Check for checked boxes in Release Type section (case-insensitive)
           if echo "$PR_BODY" | grep -qi "## Release Type"; then
-            # Extract the Release Type section (from header to next ## or end)
-            RELEASE_SECTION=$(echo "$PR_BODY" | sed -n '/## Release Type/,/^##/p' | sed '/^##/d' | head -n -1)
-            
-            # If extraction failed or is empty, try without removing last line
-            if [ -z "$RELEASE_SECTION" ]; then
+            # Extract the Release Type section
+            # If there's a following section, get content between headers
+            # Otherwise, get everything from Release Type to end
+            if echo "$PR_BODY" | sed -n '/## Release Type/,$p' | tail -n +2 | grep -q "^##"; then
+              # There is a following section
+              RELEASE_SECTION=$(echo "$PR_BODY" | sed -n '/## Release Type/,/^##/p' | sed '/^##/d')
+            else
+              # Release Type is the last section
               RELEASE_SECTION=$(echo "$PR_BODY" | sed -n '/## Release Type/,$p')
             fi
             
@@ -120,6 +123,9 @@ jobs:
           git tag ${{ steps.next_version.outputs.version }}
           git push origin ${{ steps.next_version.outputs.version }}
       
+      # Build and release the extension
+      # This step automatically detects the tag created above and creates a GitHub release
+      # with pre-compiled binaries for multiple platforms
       - uses: cli/gh-extension-precompile@v2.1.0
         with:
           go_version_file: go.mod
