@@ -51,7 +51,7 @@ func BuildReplicationCommand(command string, flags map[string]interface{}) strin
 					}
 				}
 			case int:
-				if v > 0 && (flagName == "concurrency" && v != 1 || flagName == "delay" && v != 0) {
+				if (flagName == "concurrency" && v != 1) || (flagName == "delay" && v != 0) {
 					// Only include concurrency if it's not the default (1) or delay if it's not default (0)
 					shortFlag := getShortFlag(flagName)
 					if shortFlag != "" {
