@@ -50,7 +50,12 @@ jobs:
           # Check for checked boxes in Release Type section (case-insensitive)
           if echo "$PR_BODY" | grep -qi "## Release Type"; then
             # Extract the Release Type section (from header to next ## or end)
-            RELEASE_SECTION=$(echo "$PR_BODY" | sed -n '/## Release Type/,/^##/p' | sed '$d')
+            RELEASE_SECTION=$(echo "$PR_BODY" | sed -n '/## Release Type/,/^##/p' | sed '/^##/d' | head -n -1)
+            
+            # If extraction failed or is empty, try without removing last line
+            if [ -z "$RELEASE_SECTION" ]; then
+              RELEASE_SECTION=$(echo "$PR_BODY" | sed -n '/## Release Type/,$p')
+            fi
             
             # Check for checked boxes (supports [x], [X])
             if echo "$RELEASE_SECTION" | grep -Eq '\[[xX]\].*[Mm]ajor'; then
@@ -77,6 +82,15 @@ jobs:
           MAJOR=$(echo $VERSION | cut -d. -f1)
           MINOR=$(echo $VERSION | cut -d. -f2)
           PATCH=$(echo $VERSION | cut -d. -f3)
+          
+          # Validate that version components are numeric
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ ]] || ! [[ "$MINOR" =~ ^[0-9]+$ ]] || ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+            echo "Error: Invalid version tag format: $LATEST_TAG"
+            echo "Falling back to v0.0.0"
+            MAJOR=0
+            MINOR=0
+            PATCH=0
+          fi
           
           # Increment based on release type
           RELEASE_TYPE="${{ steps.release_type.outputs.type }}"
