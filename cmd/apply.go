@@ -37,8 +37,8 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Validate CSV file early if provided
-	if err := utils.ValidateCSVEarly(commonFlags.OrgListPath); err != nil {
+	// Validate org targeting flags
+	if err := utils.ValidateOrgFlags(commonFlags); err != nil {
 		return err
 	}
 
@@ -92,14 +92,14 @@ func runApply(cmd *cobra.Command, args []string) error {
 		pterm.Info.Println("Detected GitHub Enterprise Cloud (GHEC)")
 	}
 
-	// Fetch organizations (from CSV or enterprise API)
-	orgs, err := api.GetOrganizations(enterprise, commonFlags.OrgListPath)
+	// Fetch organizations
+	orgs, err := api.GetOrganizations(enterprise, commonFlags.Org, commonFlags.OrgListPath, commonFlags.AllOrgs)
 	if err != nil {
 		return err
 	}
 
 	if len(orgs) == 0 {
-		ui.ShowNoOrganizationsWarning(commonFlags.OrgListPath)
+		ui.ShowNoOrganizationsWarning(commonFlags)
 		return nil
 	}
 
@@ -240,11 +240,11 @@ func runApply(cmd *cobra.Command, args []string) error {
 
 	// Create processor for apply command
 	processor := &processors.ApplyProcessor{
-		ConfigName:        configName,
-		ConfigDescription: configDetails.Description,
-		Settings:          configDetails.Settings,
-		Scope:             scope,
-		SetAsDefault:      setAsDefault,
+		ConfigName:         configName,
+		ConfigDescription:  configDetails.Description,
+		Settings:           configDetails.Settings,
+		Scope:              scope,
+		SetAsDefault:       setAsDefault,
 		IsEnterpriseConfig: targetType == "enterprise",
 	}
 

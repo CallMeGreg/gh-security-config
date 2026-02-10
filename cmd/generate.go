@@ -35,8 +35,8 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Validate CSV file early if provided
-	if err := utils.ValidateCSVEarly(commonFlags.OrgListPath); err != nil {
+	// Validate org targeting flags
+	if err := utils.ValidateOrgFlags(commonFlags); err != nil {
 		return err
 	}
 
@@ -99,14 +99,14 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Fetch organizations (from CSV or enterprise API)
-	orgs, err := api.GetOrganizations(enterprise, commonFlags.OrgListPath)
+	// Fetch organizations
+	orgs, err := api.GetOrganizations(enterprise, commonFlags.Org, commonFlags.OrgListPath, commonFlags.AllOrgs)
 	if err != nil {
 		return err
 	}
 
 	if len(orgs) == 0 {
-		ui.ShowNoOrganizationsWarning(commonFlags.OrgListPath)
+		ui.ShowNoOrganizationsWarning(commonFlags)
 		return nil
 	}
 
