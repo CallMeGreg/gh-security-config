@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
@@ -9,16 +10,28 @@ import (
 
 // GetCommonFlags extracts common flags used across all commands
 type CommonFlags struct {
+	Org                                string
 	OrgListPath                        string
+	AllOrgs                            bool
 	Concurrency                        int
 	Delay                              int
 	DependabotAlertsAvailable          *bool
 	DependabotSecurityUpdatesAvailable *bool
 }
 
-// ExtractCommonFlags gets org-list, concurrency, and delay flags from command
+// ExtractCommonFlags gets org targeting, concurrency, and delay flags from command
 func ExtractCommonFlags(cmd *cobra.Command) (*CommonFlags, error) {
+	org, err := cmd.Flags().GetString("org")
+	if err != nil {
+		return nil, err
+	}
+
 	orgListPath, err := cmd.Flags().GetString("org-list")
+	if err != nil {
+		return nil, err
+	}
+
+	allOrgs, err := cmd.Flags().GetBool("all-orgs")
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +83,9 @@ func ExtractCommonFlags(cmd *cobra.Command) (*CommonFlags, error) {
 	}
 
 	return &CommonFlags{
+		Org:                                org,
 		OrgListPath:                        orgListPath,
+		AllOrgs:                            allOrgs,
 		Concurrency:                        concurrency,
 		Delay:                              delay,
 		DependabotAlertsAvailable:          dependabotAlertsAvailable,
@@ -78,10 +93,16 @@ func ExtractCommonFlags(cmd *cobra.Command) (*CommonFlags, error) {
 	}, nil
 }
 
-// ValidateCSVEarly validates CSV file if provided
-func ValidateCSVEarly(orgListPath string) error {
-	if orgListPath != "" {
-		orgs, err := ReadOrganizationsFromCSV(orgListPath)
+// ValidateOrgFlags validates org targeting flags and CSV file if provided
+func ValidateOrgFlags(flags *CommonFlags) error {
+	// Ensure at least one org targeting option is provided
+	if flags.Org == "" && flags.OrgListPath == "" && !flags.AllOrgs {
+		return fmt.Errorf("one of --org, --org-list, or --all-orgs must be specified")
+	}
+
+	// Validate CSV file early if provided
+	if flags.OrgListPath != "" {
+		orgs, err := ReadOrganizationsFromCSV(flags.OrgListPath)
 		if err != nil {
 			return fmt.Errorf("CSV validation failed: %w", err)
 		}
@@ -89,6 +110,14 @@ func ValidateCSVEarly(orgListPath string) error {
 			return fmt.Errorf("CSV file contains no valid organizations")
 		}
 	}
+
+	// Validate single org name format
+	if flags.Org != "" {
+		if strings.Contains(flags.Org, " ") || strings.Contains(flags.Org, "/") {
+			return fmt.Errorf("invalid organization name format: %s", flags.Org)
+		}
+	}
+
 	return nil
 }
 

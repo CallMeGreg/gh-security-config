@@ -16,8 +16,15 @@ import (
 var applyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Apply existing security configurations to repositories",
-	Long:  "Interactive command to apply an existing security configuration to specific repositories across organizations in an enterprise",
-	RunE:  runApply,
+	Long: `Interactive command to apply an existing security configuration to specific repositories across organizations in an enterprise.
+
+For GHES 3.16+, this command supports both organization-level and enterprise-level security configurations.
+The GHES version is automatically detected from the server.`,
+	RunE: runApply,
+}
+
+func init() {
+	// Note: The --ghes-version flag has been removed as the version is now auto-detected from the /meta endpoint
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
@@ -30,8 +37,8 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Validate CSV file early if provided
-	if err := utils.ValidateCSVEarly(commonFlags.OrgListPath); err != nil {
+	// Validate org targeting flags
+	if err := utils.ValidateOrgFlags(commonFlags); err != nil {
 		return err
 	}
 
@@ -72,28 +79,55 @@ func runApply(cmd *cobra.Command, args []string) error {
 	// Set hostname if using GitHub Enterprise Server
 	ui.SetupGitHubHost(serverURL)
 
-	// Fetch organizations (from CSV or enterprise API)
-	orgs, err := api.GetOrganizations(enterprise, commonFlags.OrgListPath)
+	// Get GHES version from /meta endpoint to determine if enterprise configurations are available
+	pterm.Info.Println("Detecting GitHub Enterprise Server version...")
+	ghesVersion, err := api.GetGHESVersion()
+	if err != nil {
+		pterm.Warning.Printf("Could not detect GHES version: %v\n", err)
+		pterm.Info.Println("Assuming GitHub Enterprise Cloud (GHEC) or enterprise configurations not available")
+		ghesVersion = ""
+	} else if ghesVersion != "" {
+		pterm.Success.Printf("Detected GHES version: %s\n", ghesVersion)
+	} else {
+		pterm.Info.Println("Detected GitHub Enterprise Cloud (GHEC)")
+	}
+
+	// Fetch organizations
+	orgs, err := api.GetOrganizations(enterprise, commonFlags.Org, commonFlags.OrgListPath, commonFlags.AllOrgs)
 	if err != nil {
 		return err
 	}
 
 	if len(orgs) == 0 {
-		ui.ShowNoOrganizationsWarning(commonFlags.OrgListPath)
+		ui.ShowNoOrganizationsWarning(commonFlags)
 		return nil
 	}
 
-	// Get security configuration name to apply
-	configName, err := ui.GetConfigNameForApplication()
-	if err != nil {
-		return err
+	// Collect available configurations from both enterprise and organizations
+	var orgConfigNames []string
+	var enterpriseConfigNames []string
+	enterpriseConfigMap := make(map[string]types.SecurityConfiguration)
+
+	// Fetch enterprise configurations if GHES 3.16+
+	if api.SupportsEnterpriseConfigurations(ghesVersion) {
+		pterm.Info.Println("Fetching enterprise security configurations...")
+		enterpriseConfigs, err := api.FetchEnterpriseSecurityConfigurations(enterprise)
+		if err != nil {
+			pterm.Warning.Printf("Could not fetch enterprise configurations: %v\n", err)
+		} else {
+			for _, config := range enterpriseConfigs {
+				enterpriseConfigNames = append(enterpriseConfigNames, config.Name)
+				enterpriseConfigMap[config.Name] = config
+			}
+			if len(enterpriseConfigs) > 0 {
+				pterm.Success.Printf("Found %d enterprise security configuration(s)\n", len(enterpriseConfigs))
+			}
+		}
 	}
 
-	// Verify configuration exists in at least one organization and get its details
-	var configDetails *types.SecurityConfigurationDetails
-	var sourceOrg string
+	// Collect unique org-level configuration names from accessible orgs
+	orgConfigMap := make(map[string]bool)
 	for _, org := range orgs {
-		// Check membership for this specific organization
 		status, err := api.CheckSingleOrganizationMembership(org)
 		if err != nil || !status.IsMember || !status.IsOwner {
 			continue
@@ -104,25 +138,80 @@ func runApply(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		configID, found := api.FindConfigurationByName(configs, configName)
-		if found {
-			// Get detailed configuration
-			details, err := api.GetSecurityConfigurationDetails(org, configID)
-			if err == nil {
-				configDetails = details
-				sourceOrg = org
-				break
+		for _, config := range configs {
+			// Only add organization-level configs (not enterprise configs shown at org level)
+			if config.TargetType != "enterprise" {
+				orgConfigMap[config.Name] = true
 			}
 		}
 	}
 
-	if configDetails == nil {
-		pterm.Warning.Printf("Configuration '%s' not found in any accessible organizations.\n", configName)
-		return fmt.Errorf("configuration '%s' not found", configName)
+	for name := range orgConfigMap {
+		orgConfigNames = append(orgConfigNames, name)
+	}
+
+	if len(orgConfigNames) > 0 {
+		pterm.Success.Printf("Found %d organization security configuration(s)\n", len(orgConfigNames))
+	}
+
+	// Let user select a configuration
+	var configName string
+	var targetType string
+	if len(enterpriseConfigNames) > 0 || len(orgConfigNames) > 0 {
+		configName, targetType, err = ui.SelectConfigurationFromList(orgConfigNames, enterpriseConfigNames)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("no security configurations found at enterprise or organization level")
+	}
+
+	// Get configuration details based on target type
+	var configDetails *types.SecurityConfigurationDetails
+	var sourceOrg string
+
+	if targetType == "enterprise" {
+		// Get enterprise configuration details
+		enterpriseConfig, exists := enterpriseConfigMap[configName]
+		if !exists {
+			return fmt.Errorf("enterprise configuration '%s' not found in cached configurations", configName)
+		}
+		configDetails, err = api.GetEnterpriseSecurityConfigurationDetails(enterprise, enterpriseConfig.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get enterprise configuration details: %w", err)
+		}
+		pterm.Info.Printf("Selected enterprise configuration: '%s'\n", configName)
+	} else {
+		// Get organization configuration details (find it in any org)
+		for _, org := range orgs {
+			status, err := api.CheckSingleOrganizationMembership(org)
+			if err != nil || !status.IsMember || !status.IsOwner {
+				continue
+			}
+
+			configs, err := api.FetchSecurityConfigurations(org)
+			if err != nil {
+				continue
+			}
+
+			configID, found := api.FindConfigurationByName(configs, configName)
+			if found {
+				details, err := api.GetSecurityConfigurationDetails(org, configID)
+				if err == nil {
+					configDetails = details
+					sourceOrg = org
+					break
+				}
+			}
+		}
+
+		if configDetails == nil {
+			return fmt.Errorf("configuration '%s' not found in any accessible organizations", configName)
+		}
+		pterm.Info.Printf("Selected organization configuration '%s' from '%s'\n", configName, sourceOrg)
 	}
 
 	// Show configuration details
-	pterm.Info.Printf("Found configuration '%s' in organization '%s'\n", configName, sourceOrg)
 	ui.DisplayCurrentSettings(configDetails.Settings, configDetails.Description)
 	pterm.Println()
 
@@ -151,11 +240,12 @@ func runApply(cmd *cobra.Command, args []string) error {
 
 	// Create processor for apply command
 	processor := &processors.ApplyProcessor{
-		ConfigName:        configName,
-		ConfigDescription: configDetails.Description,
-		Settings:          configDetails.Settings,
-		Scope:             scope,
-		SetAsDefault:      setAsDefault,
+		ConfigName:         configName,
+		ConfigDescription:  configDetails.Description,
+		Settings:           configDetails.Settings,
+		Scope:              scope,
+		SetAsDefault:       setAsDefault,
+		IsEnterpriseConfig: targetType == "enterprise",
 	}
 
 	// Process each organization - use sequential processor if delay is specified

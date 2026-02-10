@@ -73,8 +73,17 @@ func FetchOrganizations(enterprise string) ([]string, error) {
 	return orgs, nil
 }
 
-// GetOrganizations returns organization list either from CSV file or from enterprise API
-func GetOrganizations(enterprise, orgListPath string) ([]string, error) {
+// GetOrganizations returns organization list from one of three sources:
+// 1) A single org name (--org)
+// 2) A CSV file of org names (--org-list)
+// 3) All orgs in the enterprise (--all-orgs)
+func GetOrganizations(enterprise, org, orgListPath string, allOrgs bool) ([]string, error) {
+	if org != "" {
+		pterm.Info.Printf("Targeting single organization: %s\n", pterm.Green(org))
+		pterm.Println()
+		return []string{org}, nil
+	}
+
 	if orgListPath != "" {
 		pterm.Info.Printf("Reading organizations from CSV file: %s\n", orgListPath)
 		csvOrgs, err := utils.ReadOrganizationsFromCSV(orgListPath)
@@ -100,14 +109,18 @@ func GetOrganizations(enterprise, orgListPath string) ([]string, error) {
 		return csvOrgs, nil
 	}
 
-	// Use existing enterprise API fetching
-	pterm.Info.Println("Fetching organizations from enterprise...")
-	orgs, err := FetchOrganizations(enterprise)
-	if err != nil {
-		return nil, err
+	if allOrgs {
+		// Use existing enterprise API fetching
+		pterm.Info.Println("Fetching all organizations from enterprise...")
+		orgs, err := FetchOrganizations(enterprise)
+		if err != nil {
+			return nil, err
+		}
+		pterm.Success.Printf("Found %d organizations in enterprise '%s'\n", len(orgs), enterprise)
+		return orgs, nil
 	}
-	pterm.Success.Printf("Found %d organizations in enterprise '%s'\n", len(orgs), enterprise)
-	return orgs, nil
+
+	return nil, fmt.Errorf("one of --org, --org-list, or --all-orgs must be specified")
 }
 
 // formatCursor formats the cursor for GraphQL pagination

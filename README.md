@@ -46,7 +46,17 @@ The extension provides four main commands for managing security configurations a
 
 These flags are available on all commands:
 
+#### Organization Targeting (mutually exclusive)
+
+- **`--org string`** - Target a single organization by name
 - **`--org-list string`** (`-l`) - Path to CSV file containing organization names to target (one per line, no header)
+- **`--all-orgs`** - Target all organizations in the enterprise
+
+> [!IMPORTANT]
+> Exactly one of `--org`, `--org-list`, or `--all-orgs` must be specified.
+
+#### Other Flags
+
 - **`--concurrency int`** (`-c`) - Number of concurrent requests (1-20, default: 1)
 - **`--delay int`** (`-d`) - Delay in seconds between organizations (1-600, mutually exclusive with `--concurrency`)
 - **`--enterprise-slug string`** (`-e`) - GitHub Enterprise slug (e.g., github). Skips interactive prompt when provided
@@ -64,35 +74,41 @@ The `generate` command has additional flags:
 ### Basic Usage Examples
 
 ```bash
-# Create a new security configuration interactively
-gh security-config generate
+# Create a new security configuration interactively for all orgs
+gh security-config generate --all-orgs
 
-# Apply an existing security configuration to repositories
-gh security-config apply
+# Apply an existing security configuration to repositories across all orgs
+gh security-config apply --all-orgs
 
-# Modify a security configuration interactively
-gh security-config modify
+# Modify a security configuration for a single org
+gh security-config modify --org my-org
 
-# Delete a security configuration interactively
-gh security-config delete
+# Delete a security configuration from organizations in a CSV
+gh security-config delete --org-list orgs.csv
 
 # Use flags to skip interactive prompts
-gh security-config generate -e my-enterprise -u github.mycompany.com -a true -s false
+gh security-config generate --all-orgs -e my-enterprise -u github.mycompany.com -a true -s false
 
 # Use concurrent processing for faster execution (up to 20 organizations at once)
-gh security-config generate --concurrency 5
+gh security-config generate --all-orgs --concurrency 5
 
 # Use delayed processing to avoid rate limits and reduce system overhead (30 second delay between organizations)
-gh security-config generate --delay 30
+gh security-config generate --org-list orgs.csv --delay 30
 ```
 
 ### Organization Targeting
 
-By default, all commands target every organization in the specified enterprise. You can limit the scope using the `--org-list` flag:
+All commands require exactly one of three mutually exclusive organization targeting options:
+
+| Flag | Description |
+|------|-------------|
+| `--org <name>` | Target a single organization by name |
+| `--org-list <path>` (`-l`) | Target organizations listed in a CSV file (one per line, no header) |
+| `--all-orgs` | Target all organizations in the enterprise |
 
 - **CSV Format**: Create a CSV file with one organization name per line (no header row required)
 - **Example CSV**: See [example-organizations.csv](example-organizations.csv) for the correct format
-- **Error Handling**: If an organization from the CSV is not found or accessible, the tool will show a warning and continue with other organizations
+- **Error Handling**: If an organization is not found or accessible, the tool will show a warning and continue with other organizations
 
 ### Copying Security Configurations
 
