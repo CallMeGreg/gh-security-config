@@ -116,5 +116,25 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	utils.PrintCompletionHeader("Security Configuration Deletion", successCount, skippedCount, errorCount)
 
+	// Build and display replication command
+	replicationFlags := map[string]interface{}{
+		"enterprise-slug":              enterprise,
+		"github-enterprise-server-url": serverURL,
+		"concurrency":                  commonFlags.Concurrency,
+		"delay":                        commonFlags.Delay,
+	}
+
+	// Add org targeting flags
+	if commonFlags.Org != "" {
+		replicationFlags["org"] = commonFlags.Org
+	} else if commonFlags.OrgListPath != "" {
+		replicationFlags["org-list"] = commonFlags.OrgListPath
+	} else if commonFlags.AllOrgs {
+		replicationFlags["all-orgs"] = true
+	}
+
+	replicationCommand := utils.BuildReplicationCommand("delete", replicationFlags)
+	utils.ShowReplicationCommand(replicationCommand)
+
 	return nil
 }
