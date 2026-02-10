@@ -18,13 +18,13 @@ var applyCmd = &cobra.Command{
 	Short: "Apply existing security configurations to repositories",
 	Long: `Interactive command to apply an existing security configuration to specific repositories across organizations in an enterprise.
 
-For GHES 3.17+, this command supports both organization-level and enterprise-level security configurations.
-Use the --ghes-version flag to specify your GitHub Enterprise Server version.`,
+For GHES 3.16+, this command supports both organization-level and enterprise-level security configurations.
+The GHES version is automatically detected from the server.`,
 	RunE: runApply,
 }
 
 func init() {
-	applyCmd.Flags().StringP("ghes-version", "v", "", "GitHub Enterprise Server version (e.g., 3.17)")
+	// Note: The --ghes-version flag has been removed as the version is now auto-detected from the /meta endpoint
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
@@ -64,11 +64,6 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ghesVersionFlag, err := cmd.Flags().GetString("ghes-version")
-	if err != nil {
-		return err
-	}
-
 	// Get enterprise name
 	enterprise, err := ui.GetEnterpriseInput(enterpriseFlag)
 	if err != nil {
@@ -84,10 +79,17 @@ func runApply(cmd *cobra.Command, args []string) error {
 	// Set hostname if using GitHub Enterprise Server
 	ui.SetupGitHubHost(serverURL)
 
-	// Get GHES version to determine if enterprise configurations are available
-	ghesVersion, err := ui.GetGHESVersionInput(ghesVersionFlag)
+	// Get GHES version from /meta endpoint to determine if enterprise configurations are available
+	pterm.Info.Println("Detecting GitHub Enterprise Server version...")
+	ghesVersion, err := api.GetGHESVersion()
 	if err != nil {
-		return err
+		pterm.Warning.Printf("Could not detect GHES version: %v\n", err)
+		pterm.Info.Println("Assuming GitHub Enterprise Cloud (GHEC) or enterprise configurations not available")
+		ghesVersion = ""
+	} else if ghesVersion != "" {
+		pterm.Success.Printf("Detected GHES version: %s\n", ghesVersion)
+	} else {
+		pterm.Info.Println("Detected GitHub Enterprise Cloud (GHEC)")
 	}
 
 	// Fetch organizations (from CSV or enterprise API)
@@ -106,7 +108,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 	var enterpriseConfigNames []string
 	enterpriseConfigMap := make(map[string]types.SecurityConfiguration)
 
-	// Fetch enterprise configurations if GHES 3.17+
+	// Fetch enterprise configurations if GHES 3.16+
 	if api.SupportsEnterpriseConfigurations(ghesVersion) {
 		pterm.Info.Println("Fetching enterprise security configurations...")
 		enterpriseConfigs, err := api.FetchEnterpriseSecurityConfigurations(enterprise)

@@ -306,15 +306,49 @@ func FetchEnterpriseSecurityConfigurations(enterprise string) ([]types.SecurityC
 	return configs, nil
 }
 
+// GetGHESVersion retrieves the GHES version from the /meta endpoint
+// Returns empty string for GitHub.com (GHEC) and the version string for GHES
+func GetGHESVersion() (string, error) {
+	response, stderr, err := gh.Exec("api", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28", "/meta")
+	if err != nil {
+		pterm.Error.Printf("Failed to fetch meta information: %v\n", err)
+		pterm.Error.Printf("gh CLI stderr: %s\n", stderr.String())
+		return "", err
+	}
+
+	var metaResponse map[string]interface{}
+	if err := json.Unmarshal(response.Bytes(), &metaResponse); err != nil {
+		return "", err
+	}
+
+	// Check if installed_version exists (GHES only)
+	if installedVersion, ok := metaResponse["installed_version"].(string); ok {
+		// Extract major.minor version from full version string (e.g., "3.16.0" -> "3.16")
+		parts := strings.Split(installedVersion, ".")
+		if len(parts) >= 2 {
+			return parts[0] + "." + parts[1], nil
+		}
+		return installedVersion, nil
+	}
+
+	// If no installed_version, this is GitHub.com (GHEC)
+	return "", nil
+}
+
 // SupportsEnterpriseConfigurations checks if the GHES version supports enterprise-level security configurations
-// Enterprise configurations are available in GHES 3.17+
+// Enterprise configurations are available in GHES 3.16+
 func SupportsEnterpriseConfigurations(ghesVersion string) bool {
+	// If empty (GHEC), enterprise configurations are not supported via this method
+	if ghesVersion == "" {
+		return false
+	}
+
 	// Parse version number
 	versionFloat, err := strconv.ParseFloat(ghesVersion, 64)
 	if err != nil {
 		return false
 	}
-	return versionFloat >= 3.17
+	return versionFloat >= 3.16
 }
 
 // GetEnterpriseSecurityConfigurationDetails retrieves detailed information about an enterprise security configuration
