@@ -254,10 +254,6 @@ When attaching configurations to repositories, you can choose:
 - **private_or_internal**: Apply only to private and internal repositories
 - **none**: Create the configuration without applying it to any repositories
 
-## Demo
-
-![Demo of gh-security-config generate](docs/gh-security-config-demo.gif)
-
 ## Development
 
 To build the extension locally:
