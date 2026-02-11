@@ -114,12 +114,14 @@ func TestBuildReplicationCommand(t *testing.T) {
 			flags: map[string]interface{}{
 				"enterprise-slug":              "my-enterprise",
 				"github-enterprise-server-url": "github.company.com",
+				"template-org":                 "template-org",
 				"all-orgs":                     true,
 			},
 			expected: []string{
 				"gh security-config apply",
 				"-e my-enterprise",
 				"-u github.company.com",
+				"-t template-org",
 				"--all-orgs",
 			},
 		},
@@ -128,11 +130,13 @@ func TestBuildReplicationCommand(t *testing.T) {
 			command: "modify",
 			flags: map[string]interface{}{
 				"enterprise-slug": "my-enterprise",
+				"template-org":    "template-org",
 				"org":             "test-org",
 			},
 			expected: []string{
 				"gh security-config modify",
 				"-e my-enterprise",
+				"-t template-org",
 				"--org test-org",
 			},
 		},
@@ -141,11 +145,13 @@ func TestBuildReplicationCommand(t *testing.T) {
 			command: "delete",
 			flags: map[string]interface{}{
 				"enterprise-slug": "my-enterprise",
+				"template-org":    "template-org",
 				"org-list":        "orgs.csv",
 			},
 			expected: []string{
 				"gh security-config delete",
 				"-e my-enterprise",
+				"-t template-org",
 				"-l orgs.csv",
 			},
 		},
@@ -238,6 +244,7 @@ func TestGetShortFlag(t *testing.T) {
 		{"dependabot-security-updates-available", "s"},
 		{"copy-from-org", "o"},
 		{"force", "f"},
+		{"template-org", "t"},
 		{"unknown-flag", ""}, // Should return empty string for unknown flags
 	}
 
