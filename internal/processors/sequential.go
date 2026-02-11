@@ -63,12 +63,17 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 
 		if result.Success {
 			sp.successCount++
-			pterm.Success.Printf("Successfully processed organization '%s'\n", result.Organization)
+			sp.progressBar.UpdateTitle(fmt.Sprintf("Processed %s", result.Organization))
+			sp.progressBar.Increment()
 		} else if result.Skipped {
 			sp.skippedCount++
+			sp.progressBar.UpdateTitle(fmt.Sprintf("Skipped %s", result.Organization))
+			sp.progressBar.Increment()
 			// Skipped message should already be printed by the processor
 		} else if result.Error != nil {
 			sp.errorCount++
+			sp.progressBar.UpdateTitle(fmt.Sprintf("Processed %s", result.Organization))
+			sp.progressBar.Increment()
 			// Check if this is a "configuration exists" error
 			var configExistsErr *types.ConfigurationExistsError
 			if errors.As(result.Error, &configExistsErr) {
@@ -95,8 +100,6 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 				}
 			}
 		}
-
-		sp.progressBar.Increment()
 	}
 
 	progressBar.Stop()

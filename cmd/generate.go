@@ -15,7 +15,7 @@ import (
 var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate and apply security configurations across enterprise organizations",
-	Long:  "Interactive command to create security configurations and apply them to organizations in an enterprise. Optionally copy an existing configuration from another organization using --copy-from-org.",
+	Long:  "Interactive command to create security configurations and apply them to organizations in an enterprise.",
 	RunE:  runGenerate,
 }
 
@@ -196,6 +196,34 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 
 	utils.PrintCompletionHeader("Security Configuration Generation", successCount, skippedCount, errorCount)
+
+	// Build and display replication command
+	replicationFlags := map[string]interface{}{
+		"enterprise-slug":                       enterprise,
+		"github-enterprise-server-url":          serverURL,
+		"dependabot-alerts-available":           fmt.Sprintf("%t", dependabotAlertsAvailable),
+		"dependabot-security-updates-available": fmt.Sprintf("%t", dependabotSecurityUpdatesAvailable),
+		"concurrency":                           commonFlags.Concurrency,
+		"delay":                                 commonFlags.Delay,
+		"force":                                 force,
+	}
+
+	// Add org targeting flags
+	if commonFlags.Org != "" {
+		replicationFlags["org"] = commonFlags.Org
+	} else if commonFlags.OrgListPath != "" {
+		replicationFlags["org-list"] = commonFlags.OrgListPath
+	} else if commonFlags.AllOrgs {
+		replicationFlags["all-orgs"] = true
+	}
+
+	// Add copy-from-org flag if used
+	if copyFromOrg != "" {
+		replicationFlags["copy-from-org"] = copyFromOrg
+	}
+
+	replicationCommand := utils.BuildReplicationCommand("generate", replicationFlags)
+	utils.ShowReplicationCommand(replicationCommand)
 
 	return nil
 }
