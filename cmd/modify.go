@@ -15,7 +15,7 @@ import (
 var modifyCmd = &cobra.Command{
 	Use:   "modify",
 	Short: "Modify existing security configurations across enterprise organizations",
-	Long:  "Interactive command to update existing security configurations across all organizations in an enterprise",
+	Long:  "Interactive command to update existing security configurations across organizations in an enterprise",
 	RunE:  runModify,
 }
 
@@ -189,12 +189,12 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 	// Build and display replication command
 	replicationFlags := map[string]interface{}{
-		"enterprise-slug":                         enterprise,
-		"github-enterprise-server-url":            serverURL,
-		"dependabot-alerts-available":             fmt.Sprintf("%t", dependabotAlertsAvailable),
-		"dependabot-security-updates-available":   fmt.Sprintf("%t", dependabotSecurityUpdatesAvailable),
-		"concurrency":                             commonFlags.Concurrency,
-		"delay":                                   commonFlags.Delay,
+		"enterprise-slug":                       enterprise,
+		"github-enterprise-server-url":          serverURL,
+		"dependabot-alerts-available":           fmt.Sprintf("%t", dependabotAlertsAvailable),
+		"dependabot-security-updates-available": fmt.Sprintf("%t", dependabotSecurityUpdatesAvailable),
+		"concurrency":                           commonFlags.Concurrency,
+		"delay":                                 commonFlags.Delay,
 	}
 
 	// Add org targeting flags

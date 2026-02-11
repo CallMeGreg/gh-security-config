@@ -16,10 +16,9 @@ import (
 var applyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Apply existing security configurations to repositories",
-	Long: `Interactive command to apply an existing security configuration to specific repositories across organizations in an enterprise.
+	Long: `Interactive command to apply an existing security configuration to organizations in an enterprise.
 
-For GHES 3.16+, this command supports both organization-level and enterprise-level security configurations.
-The GHES version is automatically detected from the server.`,
+For GHES 3.16+, this command supports both organization-level and enterprise-level security configurations.`,
 	RunE: runApply,
 }
 

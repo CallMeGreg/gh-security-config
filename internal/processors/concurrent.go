@@ -74,10 +74,10 @@ func (cp *ConcurrentProcessor) Process() (successCount, skippedCount, errorCount
 		cp.mu.Lock()
 		resultsProcessed++
 		cp.progressBar.UpdateTitle(fmt.Sprintf("Processed %s", result.Organization))
+		cp.progressBar.Increment()
 
 		if result.Success {
 			cp.successCount++
-			pterm.Success.Printf("Successfully processed organization '%s'\n", result.Organization)
 		} else if result.Skipped {
 			cp.skippedCount++
 			// Skipped message should already be printed by the processor
@@ -124,7 +124,6 @@ func (cp *ConcurrentProcessor) Process() (successCount, skippedCount, errorCount
 			}
 		}
 
-		cp.progressBar.Increment()
 		cp.mu.Unlock()
 	}
 

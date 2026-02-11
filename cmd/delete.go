@@ -13,7 +13,7 @@ import (
 var deleteCmd = &cobra.Command{
 	Use:   "delete",
 	Short: "Delete security configurations across enterprise organizations",
-	Long:  "Interactive command to delete security configurations from all organizations in an enterprise",
+	Long:  "Interactive command to delete security configurations from organizations in an enterprise",
 	RunE:  runDelete,
 }
 
