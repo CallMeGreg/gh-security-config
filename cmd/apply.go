@@ -23,7 +23,8 @@ For GHES 3.16+, this command supports both organization-level and enterprise-lev
 }
 
 func init() {
-	// Note: The --ghes-version flag has been removed as the version is now auto-detected from the /meta endpoint
+	// Add template-org flag specific to apply command
+	applyCmd.Flags().StringP("template-org", "t", "", "Template organization to fetch security configurations from (required)")
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
@@ -36,8 +37,8 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Validate org targeting flags
-	if err := utils.ValidateOrgFlags(commonFlags); err != nil {
+	// Validate org targeting flags (optional for apply command)
+	if err := utils.ValidateOrgFlagsOptional(commonFlags); err != nil {
 		return err
 	}
 
@@ -63,6 +64,11 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	templateOrgFlag, err := cmd.Flags().GetString("template-org")
+	if err != nil {
+		return err
+	}
+
 	// Get enterprise name
 	enterprise, err := ui.GetEnterpriseInput(enterpriseFlag)
 	if err != nil {
@@ -83,26 +89,13 @@ func runApply(cmd *cobra.Command, args []string) error {
 	ghesVersion, err := api.GetGHESVersion()
 	if err != nil {
 		pterm.Warning.Printf("Could not detect GHES version: %v\n", err)
-		pterm.Info.Println("Assuming GitHub Enterprise Cloud (GHEC) or enterprise configurations not available")
+		pterm.Info.Println("Assuming enterprise configurations are not available")
 		ghesVersion = ""
 	} else if ghesVersion != "" {
 		pterm.Success.Printf("Detected GHES version: %s\n", ghesVersion)
-	} else {
-		pterm.Info.Println("Detected GitHub Enterprise Cloud (GHEC)")
 	}
 
-	// Fetch organizations
-	orgs, err := api.GetOrganizations(enterprise, commonFlags.Org, commonFlags.OrgListPath, commonFlags.AllOrgs)
-	if err != nil {
-		return err
-	}
-
-	if len(orgs) == 0 {
-		ui.ShowNoOrganizationsWarning(commonFlags)
-		return nil
-	}
-
-	// Collect available configurations from both enterprise and organizations
+	// Collect available configurations from both enterprise and template organization
 	var orgConfigNames []string
 	var enterpriseConfigNames []string
 	enterpriseConfigMap := make(map[string]types.SecurityConfiguration)
@@ -124,33 +117,71 @@ func runApply(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Collect unique org-level configuration names from accessible orgs
-	orgConfigMap := make(map[string]bool)
-	for _, org := range orgs {
-		status, err := api.CheckSingleOrganizationMembership(org)
-		if err != nil || !status.IsMember || !status.IsOwner {
-			continue
+	// If no org targeting method is provided, prompt user to select one
+	if !utils.HasOrgTargeting(commonFlags) {
+		if len(enterpriseConfigNames) > 0 {
+			pterm.Info.Println("Organization-level security configurations applied by this command will be in addition to existing enterprise configurations.")
 		}
 
-		configs, err := api.FetchSecurityConfigurations(org)
+		targetingMethod, err := ui.SelectOrgTargetingMethod()
 		if err != nil {
-			continue
+			return err
 		}
 
-		for _, config := range configs {
-			// Only add organization-level configs (not enterprise configs shown at org level)
-			if config.TargetType != "enterprise" {
-				orgConfigMap[config.Name] = true
+		switch targetingMethod {
+		case "all-orgs":
+			commonFlags.AllOrgs = true
+		case "single-org":
+			orgName, err := ui.GetSingleOrgName()
+			if err != nil {
+				return err
+			}
+			commonFlags.Org = orgName
+		case "org-list":
+			csvPath, err := ui.GetOrgListPath()
+			if err != nil {
+				return err
+			}
+			commonFlags.OrgListPath = csvPath
+			// Validate the CSV file
+			if err := utils.ValidateOrgFlagsOptional(commonFlags); err != nil {
+				return err
 			}
 		}
 	}
 
-	for name := range orgConfigMap {
-		orgConfigNames = append(orgConfigNames, name)
+	// Get template organization name
+	templateOrg, err := ui.GetTemplateOrgInput(templateOrgFlag)
+	if err != nil {
+		return err
 	}
 
-	if len(orgConfigNames) > 0 {
-		pterm.Success.Printf("Found %d organization security configuration(s)\n", len(orgConfigNames))
+	pterm.Info.Printf("Using template organization: %s\n", templateOrg)
+
+	// Fetch org-level configuration names from template organization only
+	pterm.Info.Printf("Fetching security configurations from template organization '%s'...\n", templateOrg)
+	status, err := api.CheckSingleOrganizationMembership(templateOrg)
+	if err != nil || !status.IsMember || !status.IsOwner {
+		if err != nil {
+			pterm.Warning.Printf("Could not access template organization '%s': %v\n", templateOrg, err)
+		} else {
+			pterm.Warning.Printf("You must be an owner of template organization '%s' to fetch configurations\n", templateOrg)
+		}
+	} else {
+		configs, err := api.FetchSecurityConfigurations(templateOrg)
+		if err != nil {
+			pterm.Warning.Printf("Could not fetch configurations from template organization '%s': %v\n", templateOrg, err)
+		} else {
+			for _, config := range configs {
+				// Only add organization-level configs (not enterprise configs shown at org level)
+				if config.TargetType != "enterprise" {
+					orgConfigNames = append(orgConfigNames, config.Name)
+				}
+			}
+			if len(orgConfigNames) > 0 {
+				pterm.Success.Printf("Found %d organization security configuration(s) in template org\n", len(orgConfigNames))
+			}
+		}
 	}
 
 	// Let user select a configuration
@@ -163,6 +194,17 @@ func runApply(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		return fmt.Errorf("no security configurations found at enterprise or organization level")
+	}
+
+	// Fetch organizations
+	orgs, err := api.GetOrganizations(enterprise, commonFlags.Org, commonFlags.OrgListPath, commonFlags.AllOrgs)
+	if err != nil {
+		return err
+	}
+
+	if len(orgs) == 0 {
+		ui.ShowNoOrganizationsWarning(commonFlags)
+		return nil
 	}
 
 	// Get configuration details based on target type
@@ -181,33 +223,24 @@ func runApply(cmd *cobra.Command, args []string) error {
 		}
 		pterm.Info.Printf("Selected enterprise configuration: '%s'\n", configName)
 	} else {
-		// Get organization configuration details (find it in any org)
-		for _, org := range orgs {
-			status, err := api.CheckSingleOrganizationMembership(org)
-			if err != nil || !status.IsMember || !status.IsOwner {
-				continue
-			}
-
-			configs, err := api.FetchSecurityConfigurations(org)
-			if err != nil {
-				continue
-			}
-
-			configID, found := api.FindConfigurationByName(configs, configName)
-			if found {
-				details, err := api.GetSecurityConfigurationDetails(org, configID)
-				if err == nil {
-					configDetails = details
-					sourceOrg = org
-					break
-				}
-			}
+		// Get organization configuration details from template org
+		configs, err := api.FetchSecurityConfigurations(templateOrg)
+		if err != nil {
+			return fmt.Errorf("failed to fetch configurations from template org: %w", err)
 		}
 
-		if configDetails == nil {
-			return fmt.Errorf("configuration '%s' not found in any accessible organizations", configName)
+		configID, found := api.FindConfigurationByName(configs, configName)
+		if !found {
+			return fmt.Errorf("configuration '%s' not found in template organization '%s'", configName, templateOrg)
 		}
-		pterm.Info.Printf("Selected organization configuration '%s' from '%s'\n", configName, sourceOrg)
+
+		details, err := api.GetSecurityConfigurationDetails(templateOrg, configID)
+		if err != nil {
+			return fmt.Errorf("failed to get configuration details: %w", err)
+		}
+		configDetails = details
+		sourceOrg = templateOrg
+		pterm.Info.Printf("Selected organization configuration '%s' from template org '%s'\n", configName, sourceOrg)
 	}
 
 	// Show configuration details
@@ -265,6 +298,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 	replicationFlags := map[string]interface{}{
 		"enterprise-slug":              enterprise,
 		"github-enterprise-server-url": serverURL,
+		"template-org":                 templateOrg,
 		"concurrency":                  commonFlags.Concurrency,
 		"delay":                        commonFlags.Delay,
 	}

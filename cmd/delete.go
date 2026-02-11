@@ -17,6 +17,11 @@ var deleteCmd = &cobra.Command{
 	RunE:  runDelete,
 }
 
+func init() {
+	// Add template-org flag specific to delete command
+	deleteCmd.Flags().StringP("template-org", "t", "", "Template organization to fetch security configurations from (required)")
+}
+
 func runDelete(cmd *cobra.Command, args []string) error {
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgRed)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Enterprise Security Configuration Deletion")
 	pterm.Println()
@@ -27,8 +32,8 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Validate org targeting flags
-	if err := utils.ValidateOrgFlags(commonFlags); err != nil {
+	// Validate org targeting flags (optional for delete command)
+	if err := utils.ValidateOrgFlagsOptional(commonFlags); err != nil {
 		return err
 	}
 
@@ -54,6 +59,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	templateOrgFlag, err := cmd.Flags().GetString("template-org")
+	if err != nil {
+		return err
+	}
+
 	// Get enterprise name
 	enterprise, err := ui.GetEnterpriseInput(enterpriseFlag)
 	if err != nil {
@@ -68,6 +78,73 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	// Set hostname if using GitHub Enterprise Server
 	ui.SetupGitHubHost(serverURL)
+
+	// Get GHES version from /meta endpoint to determine if enterprise configurations are available
+	pterm.Info.Println("Detecting GitHub Enterprise Server version...")
+	ghesVersion, err := api.GetGHESVersion()
+	var enterpriseConfigCount int
+	if err != nil {
+		pterm.Warning.Printf("Could not detect GHES version: %v\n", err)
+		pterm.Info.Println("Assuming enterprise configurations are not available")
+		ghesVersion = ""
+	} else if ghesVersion != "" {
+		pterm.Success.Printf("Detected GHES version: %s\n", ghesVersion)
+	}
+
+	// Fetch enterprise configurations if GHES 3.16+
+	if api.SupportsEnterpriseConfigurations(ghesVersion) {
+		pterm.Info.Println("Fetching enterprise security configurations...")
+		enterpriseConfigs, err := api.FetchEnterpriseSecurityConfigurations(enterprise)
+		if err != nil {
+			pterm.Warning.Printf("Could not fetch enterprise configurations: %v\n", err)
+		} else {
+			enterpriseConfigCount = len(enterpriseConfigs)
+			if enterpriseConfigCount > 0 {
+				pterm.Success.Printf("Found %d enterprise security configuration(s)\n", enterpriseConfigCount)
+			}
+		}
+	}
+
+	// If no org targeting method is provided, prompt user to select one
+	if !utils.HasOrgTargeting(commonFlags) {
+		if enterpriseConfigCount > 0 {
+			pterm.Info.Println("Organization-level security configurations deleted by this command will not affect existing enterprise configurations.")
+		}
+
+		targetingMethod, err := ui.SelectOrgTargetingMethod()
+		if err != nil {
+			return err
+		}
+
+		switch targetingMethod {
+		case "all-orgs":
+			commonFlags.AllOrgs = true
+		case "single-org":
+			orgName, err := ui.GetSingleOrgName()
+			if err != nil {
+				return err
+			}
+			commonFlags.Org = orgName
+		case "org-list":
+			csvPath, err := ui.GetOrgListPath()
+			if err != nil {
+				return err
+			}
+			commonFlags.OrgListPath = csvPath
+			// Validate the CSV file
+			if err := utils.ValidateOrgFlagsOptional(commonFlags); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Get template organization name
+	templateOrg, err := ui.GetTemplateOrgInput(templateOrgFlag)
+	if err != nil {
+		return err
+	}
+
+	pterm.Info.Printf("Using template organization: %s\n", templateOrg)
 
 	// Fetch organizations
 	orgs, err := api.GetOrganizations(enterprise, commonFlags.Org, commonFlags.OrgListPath, commonFlags.AllOrgs)
@@ -120,6 +197,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	replicationFlags := map[string]interface{}{
 		"enterprise-slug":              enterprise,
 		"github-enterprise-server-url": serverURL,
+		"template-org":                 templateOrg,
 		"concurrency":                  commonFlags.Concurrency,
 		"delay":                        commonFlags.Delay,
 	}

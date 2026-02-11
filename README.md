@@ -53,7 +53,8 @@ These flags are available on all commands:
 - **`--all-orgs`** - Target all organizations in the enterprise
 
 > [!IMPORTANT]
-> Exactly one of `--org`, `--org-list`, or `--all-orgs` must be specified.
+> For the `generate` command, exactly one of `--org`, `--org-list`, or `--all-orgs` must be specified.
+> For the `apply`, `delete`, and `modify` commands, if no org targeting flag is provided, you will be prompted to select a targeting method interactively.
 
 #### Other Flags
 
@@ -71,23 +72,32 @@ The `generate` command has additional flags:
 - **`--copy-from-org string`** (`-o`) - Organization name to copy an existing configuration from
 - **`--force`** (`-f`) - Force deletion of existing configurations with the same name before creating new ones
 
+### Apply, Delete, and Modify Command Flags
+
+The `apply`, `delete`, and `modify` commands have an additional required flag:
+
+- **`--template-org string`** (`-t`) - Template organization to fetch security configurations from. This organization is used as the source of truth for security configuration settings. If not provided, you will be prompted to enter it interactively.
+
 ### Basic Usage Examples
 
 ```bash
 # Create a new security configuration interactively for all orgs
 gh security-config generate --all-orgs
 
-# Apply an existing security configuration to repositories across all orgs
-gh security-config apply --all-orgs
+# Apply an existing security configuration from a template org to all orgs
+gh security-config apply --template-org my-template-org --all-orgs
 
-# Modify a security configuration for a single org
-gh security-config modify --org my-org
+# Modify a security configuration (fetched from template org) for a single org
+gh security-config modify --template-org my-template-org --org my-org
 
 # Delete a security configuration from organizations in a CSV
-gh security-config delete --org-list orgs.csv
+gh security-config delete --template-org my-template-org --org-list orgs.csv
 
 # Use flags to skip interactive prompts
 gh security-config generate --all-orgs -e my-enterprise -u github.mycompany.com -a true -s false
+
+# Apply with interactive org selection (no org flag provided)
+gh security-config apply --template-org my-template-org
 
 # Use concurrent processing for faster execution (up to 20 organizations at once)
 gh security-config generate --all-orgs --concurrency 5
@@ -182,31 +192,37 @@ Dependabot Alerts and Security Updates have different availability requirements:
 The extension will guide you through:
 
 1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
-2. **Configuration Selection**: Specify the name of an existing security configuration to apply
-3. **Repository Selection**: Choose which repositories should have the configuration applied
-4. **Confirmation**: Review the operation summary and confirm application
+2. **Template Organization**: Specify the template organization from which to fetch the security configuration
+3. **Organization Targeting**: If not provided via flags, select whether to target all orgs, a single org, or orgs from a CSV file
+4. **Configuration Selection**: Select from available security configurations in the template organization
+5. **Repository Selection**: Choose which repositories should have the configuration applied
+6. **Confirmation**: Review the operation summary and confirm application
 
 > [!NOTE]
-> The apply operation will attach the specified security configuration to repositories across ALL organizations in the enterprise where the configuration exists. This allows you to apply configurations that were created manually, or without targeting repositories initially.
+> The apply operation fetches the security configuration from the specified template organization and applies it to repositories across the targeted organizations. The template org serves as the source of truth for the configuration settings.
 
 ### Delete Security Configurations
 
 The extension will guide you through:
 
 1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
-2. **Configuration Selection**: Specify the name of the security configuration to delete
-3. **Confirmation**: Review the operation summary and confirm deletion (defaults to cancel for safety)
+2. **Template Organization**: Specify the template organization from which to reference the security configuration
+3. **Organization Targeting**: If not provided via flags, select whether to target all orgs, a single org, or orgs from a CSV file
+4. **Configuration Selection**: Specify the name of the security configuration to delete
+5. **Confirmation**: Review the operation summary and confirm deletion (defaults to cancel for safety)
 
 > [!WARNING]
-> The delete operation will remove the specified security configuration from ALL organizations in the enterprise. This action cannot be undone. Repositories will retain their security settings but will no longer be associated with the configuration.
+> The delete operation will remove the specified security configuration from the targeted organizations. This action cannot be undone. Repositories will retain their security settings but will no longer be associated with the configuration.
 
 ### Modify Security Configurations
 
 The extension will guide you through:
 
 1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
-2. **Configuration Selection**: Specify the name of the security configuration to modify
-3. **Current Settings Display**: View the current configuration settings and description
+2. **Template Organization**: Specify the template organization from which to fetch the current security configuration
+3. **Organization Targeting**: If not provided via flags, select whether to target all orgs, a single org, or orgs from a CSV file
+4. **Configuration Selection**: Specify the name of the security configuration to modify
+5. **Current Settings Display**: View the current configuration settings and description from the template organization
 4. **Name Update**: Update the configuration name (optional)
 5. **Description Update**: Update the configuration description (optional)
 6. **Settings Update**: Interactively update each security setting with options to keep current values

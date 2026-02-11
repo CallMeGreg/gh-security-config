@@ -16,6 +16,7 @@ func BuildReplicationCommand(command string, flags map[string]interface{}) strin
 	flagOrder := []string{
 		"enterprise-slug",
 		"github-enterprise-server-url",
+		"template-org",
 		"org",
 		"org-list",
 		"all-orgs",
@@ -79,6 +80,7 @@ func getShortFlag(flagName string) string {
 		"dependabot-security-updates-available":   "s",
 		"copy-from-org":                           "o",
 		"force":                                   "f",
+		"template-org":                            "t",
 	}
 	return shortFlags[flagName]
 }

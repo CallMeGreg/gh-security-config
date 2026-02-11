@@ -93,3 +93,79 @@ func SetupGitHubHost(serverURL string) {
 		pterm.Info.Printf("Using GitHub Enterprise Server: %s\n", serverURL)
 	}
 }
+
+// SelectOrgTargetingMethod prompts user to select an org targeting method
+func SelectOrgTargetingMethod() (string, error) {
+	options := []string{
+		"all-orgs",
+		"single-org",
+		"org-list",
+	}
+
+	selection, err := pterm.DefaultInteractiveSelect.
+		WithOptions(options).
+		WithDefaultOption("all-orgs").
+		Show("Select organization targeting method")
+	if err != nil {
+		return "", err
+	}
+
+	return selection, nil
+}
+
+// GetSingleOrgName prompts for a single organization name
+func GetSingleOrgName() (string, error) {
+	orgName, err := pterm.DefaultInteractiveTextInput.
+		WithDefaultText("").
+		WithMultiLine(false).
+		Show("Enter organization name")
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(orgName) == "" {
+		return "", fmt.Errorf("organization name is required")
+	}
+
+	return strings.TrimSpace(orgName), nil
+}
+
+// GetOrgListPath prompts for the path to a CSV file containing organizations
+func GetOrgListPath() (string, error) {
+	csvPath, err := pterm.DefaultInteractiveTextInput.
+		WithDefaultText("organizations.csv").
+		WithMultiLine(false).
+		Show("Enter path to CSV file containing organization names")
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(csvPath) == "" {
+		return "", fmt.Errorf("CSV file path is required")
+	}
+
+	return strings.TrimSpace(csvPath), nil
+}
+
+// GetTemplateOrgInput prompts for template organization name or uses provided value
+func GetTemplateOrgInput(templateOrgFlag string) (string, error) {
+	// If template org is provided via flag, use it
+	if strings.TrimSpace(templateOrgFlag) != "" {
+		return strings.TrimSpace(templateOrgFlag), nil
+	}
+
+	// Otherwise, prompt for input
+	templateOrg, err := pterm.DefaultInteractiveTextInput.
+		WithDefaultText("").
+		WithMultiLine(false).
+		Show("Enter the template organization name (to fetch security configurations from)")
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(templateOrg) == "" {
+		return "", fmt.Errorf("template organization name is required")
+	}
+
+	return strings.TrimSpace(templateOrg), nil
+}
