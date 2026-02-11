@@ -19,6 +19,11 @@ var modifyCmd = &cobra.Command{
 	RunE:  runModify,
 }
 
+func init() {
+	// Add template-org flag specific to modify command
+	modifyCmd.Flags().StringP("template-org", "t", "", "Template organization to fetch security configurations from (required)")
+}
+
 func runModify(cmd *cobra.Command, args []string) error {
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgMagenta)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Enterprise Security Configuration Modification")
 	pterm.Println()
@@ -29,9 +34,38 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Validate org targeting flags
-	if err := utils.ValidateOrgFlags(commonFlags); err != nil {
+	// Validate org targeting flags (optional for modify command)
+	if err := utils.ValidateOrgFlagsOptional(commonFlags); err != nil {
 		return err
+	}
+
+	// If no org targeting method is provided, prompt user to select one
+	if !utils.HasOrgTargeting(commonFlags) {
+		targetingMethod, err := ui.SelectOrgTargetingMethod()
+		if err != nil {
+			return err
+		}
+
+		switch targetingMethod {
+		case "all-orgs":
+			commonFlags.AllOrgs = true
+		case "single-org":
+			orgName, err := ui.GetSingleOrgName()
+			if err != nil {
+				return err
+			}
+			commonFlags.Org = orgName
+		case "org-list":
+			csvPath, err := ui.GetOrgListPath()
+			if err != nil {
+				return err
+			}
+			commonFlags.OrgListPath = csvPath
+			// Validate the CSV file
+			if err := utils.ValidateOrgFlagsOptional(commonFlags); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Validate concurrency and delay flags
@@ -56,6 +90,11 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	templateOrgFlag, err := cmd.Flags().GetString("template-org")
+	if err != nil {
+		return err
+	}
+
 	// Get enterprise name
 	enterprise, err := ui.GetEnterpriseInput(enterpriseFlag)
 	if err != nil {
@@ -70,6 +109,14 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 	// Set hostname if using GitHub Enterprise Server
 	ui.SetupGitHubHost(serverURL)
+
+	// Get template organization name
+	templateOrg, err := ui.GetTemplateOrgInput(templateOrgFlag)
+	if err != nil {
+		return err
+	}
+
+	pterm.Info.Printf("Using template organization: %s\n", templateOrg)
 
 	// Check Dependabot availability
 	dependabotAlertsAvailable, err := ui.GetDependabotAlertsAvailability(commonFlags.DependabotAlertsAvailable)
@@ -99,36 +146,39 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Fetch existing configuration details from first accessible organization to show current settings
+	// Fetch existing configuration details from template organization to show current settings
 	var currentSettings map[string]interface{}
 	var currentDescription string
-	for _, org := range orgs {
-		// Check membership for this specific organization
-		status, err := api.CheckSingleOrganizationMembership(org)
-		if err != nil || !status.IsMember || !status.IsOwner {
-			continue
-		}
 
-		configs, err := api.FetchSecurityConfigurations(org)
+	// Check membership for template organization
+	status, err := api.CheckSingleOrganizationMembership(templateOrg)
+	if err != nil || !status.IsMember || !status.IsOwner {
 		if err != nil {
-			continue
+			return fmt.Errorf("could not access template organization '%s': %w", templateOrg, err)
 		}
+		return fmt.Errorf("you must be an owner of template organization '%s' to fetch configurations", templateOrg)
+	}
 
-		configID, found := api.FindConfigurationByName(configs, configName)
-		if found {
-			// Get detailed configuration
-			configDetails, err := api.GetSecurityConfigurationDetails(org, configID)
-			if err == nil {
-				currentSettings = configDetails.Settings
-				currentDescription = configDetails.Description
-				break
-			}
+	configs, err := api.FetchSecurityConfigurations(templateOrg)
+	if err != nil {
+		return fmt.Errorf("failed to fetch configurations from template org: %w", err)
+	}
+
+	configID, found := api.FindConfigurationByName(configs, configName)
+	if found {
+		// Get detailed configuration
+		configDetails, err := api.GetSecurityConfigurationDetails(templateOrg, configID)
+		if err == nil {
+			currentSettings = configDetails.Settings
+			currentDescription = configDetails.Description
+		} else {
+			return fmt.Errorf("failed to get configuration details: %w", err)
 		}
 	}
 
 	if currentSettings == nil {
-		pterm.Warning.Printf("Configuration '%s' not found in any accessible organizations.\n", configName)
-		return fmt.Errorf("configuration '%s' not found", configName)
+		pterm.Warning.Printf("Configuration '%s' not found in template organization '%s'.\n", configName, templateOrg)
+		return fmt.Errorf("configuration '%s' not found in template org", configName)
 	}
 
 	// Show current settings and get new settings
@@ -191,6 +241,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	replicationFlags := map[string]interface{}{
 		"enterprise-slug":                       enterprise,
 		"github-enterprise-server-url":          serverURL,
+		"template-org":                          templateOrg,
 		"dependabot-alerts-available":           fmt.Sprintf("%t", dependabotAlertsAvailable),
 		"dependabot-security-updates-available": fmt.Sprintf("%t", dependabotSecurityUpdatesAvailable),
 		"concurrency":                           commonFlags.Concurrency,

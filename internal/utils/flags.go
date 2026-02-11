@@ -121,6 +121,34 @@ func ValidateOrgFlags(flags *CommonFlags) error {
 	return nil
 }
 
+// ValidateOrgFlagsOptional validates org targeting flags if provided, but doesn't require them
+func ValidateOrgFlagsOptional(flags *CommonFlags) error {
+	// Validate CSV file early if provided
+	if flags.OrgListPath != "" {
+		orgs, err := ReadOrganizationsFromCSV(flags.OrgListPath)
+		if err != nil {
+			return fmt.Errorf("CSV validation failed: %w", err)
+		}
+		if len(orgs) == 0 {
+			return fmt.Errorf("CSV file contains no valid organizations")
+		}
+	}
+
+	// Validate single org name format
+	if flags.Org != "" {
+		if strings.Contains(flags.Org, " ") || strings.Contains(flags.Org, "/") {
+			return fmt.Errorf("invalid organization name format: %s", flags.Org)
+		}
+	}
+
+	return nil
+}
+
+// HasOrgTargeting checks if any org targeting flag is set
+func HasOrgTargeting(flags *CommonFlags) bool {
+	return flags.Org != "" || flags.OrgListPath != "" || flags.AllOrgs
+}
+
 // PrintCompletionHeader prints the completion header with results
 func PrintCompletionHeader(operation string, successCount, skippedCount, errorCount int) {
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgGreen)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Printf("%s Complete! (Success: %d, Skipped: %d, Errors: %d)", operation, successCount, skippedCount, errorCount)
