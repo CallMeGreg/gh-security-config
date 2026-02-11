@@ -1,9 +1,9 @@
 # GitHub Security Configuration CLI Extension
 
-A GitHub CLI extension to create and apply security configurations across many organizations in a GitHub Enterprise.
+A GitHub CLI extension to create, apply, modify, or delete security configurations across many organizations in a GitHub Enterprise.
 
 > [!NOTE]
-> This extension is intended for GitHub Enterprise Server (GHES) 3.15 and supports configuring GitHub Advanced Security, Secret Scanning, and Dependabot features as part of a security configuration. For GHES 3.16+ and GitHub Enterprise Cloud (GHEC) it's recommended to use [Enterprise Security Configurations](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-code-security/securing-your-enterprise/about-security-configurations) instead of this solution.
+> For GHES 3.16+ and GitHub Enterprise Cloud (GHEC) it's recommended to use a single [Enterprise Security Configuration](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-code-security/securing-your-enterprise/about-security-configurations) instead of creating security configurations per organization.
 
 ## Pre-requisites
 
@@ -37,7 +37,7 @@ The extension provides four main commands for managing security configurations a
 
 ### Commands
 
-- **`generate`** - Create and apply new security configurations across organizations
+- **`generate`** - Create and optionally apply new security configurations across organizations
 - **`apply`** - Apply existing security configurations to repositories across organizations
 - **`modify`** - Update existing security configurations across organizations
 - **`delete`** - Remove existing security configurations from organizations
@@ -52,18 +52,14 @@ These flags are available on all commands:
 - **`--org-list string`** (`-l`) - Path to CSV file containing organization names to target (one per line, no header)
 - **`--all-orgs`** - Target all organizations in the enterprise
 
-> [!IMPORTANT]
-> For the `generate` command, exactly one of `--org`, `--org-list`, or `--all-orgs` must be specified.
-> For the `apply`, `delete`, and `modify` commands, if no org targeting flag is provided, you will be prompted to select a targeting method interactively.
-
 #### Other Flags
 
-- **`--concurrency int`** (`-c`) - Number of concurrent requests (1-20, default: 1)
+- **`--concurrency int`** (`-c`) - Number of concurrent requests (1-20, default: 1, mutually exclusive with `--delay`)
 - **`--delay int`** (`-d`) - Delay in seconds between organizations (1-600, mutually exclusive with `--concurrency`)
-- **`--enterprise-slug string`** (`-e`) - GitHub Enterprise slug (e.g., github). Skips interactive prompt when provided
-- **`--github-enterprise-server-url string`** (`-u`) - GitHub Enterprise Server URL (e.g., github.company.com). Skips interactive prompt when provided
-- **`--dependabot-alerts-available string`** (`-a`) - Whether Dependabot Alerts are available in your GHES instance (true/false). Skips interactive prompt when provided
-- **`--dependabot-security-updates-available string`** (`-s`) - Whether Dependabot Security Updates are available in your GHES instance (true/false). Skips interactive prompt when provided
+- **`--enterprise-slug string`** (`-e`) - GitHub Enterprise slug (e.g., github)
+- **`--github-enterprise-server-url string`** (`-u`) - GitHub Enterprise Server URL (e.g., github.company.com)
+- **`--dependabot-alerts-available string`** (`-a`) - Whether Dependabot Alerts are available in your GHES instance (true/false)
+- **`--dependabot-security-updates-available string`** (`-s`) - Whether Dependabot Security Updates are available in your GHES instance (true/false)
 
 ### Generate Command Flags
 
@@ -81,23 +77,20 @@ The `apply`, `delete`, and `modify` commands have an additional required flag:
 ### Basic Usage Examples
 
 ```bash
-# Create a new security configuration interactively for all orgs
-gh security-config generate --all-orgs
+# Create a new security configuration
+gh security-config generate
 
-# Apply an existing security configuration from a template org to all orgs
-gh security-config apply --template-org my-template-org --all-orgs
+# Apply an existing security configuration to all orgs
+gh security-config apply --all-orgs
 
-# Modify a security configuration (fetched from template org) for a single org
-gh security-config modify --template-org my-template-org --org my-org
+# Modify a security configuration
+gh security-config modify
 
-# Delete a security configuration from organizations in a CSV
-gh security-config delete --template-org my-template-org --org-list orgs.csv
+# Delete a security configuration from a CSV list of organizations
+gh security-config delete --org-list orgs.csv
 
 # Use flags to skip interactive prompts
 gh security-config generate --all-orgs -e my-enterprise -u github.mycompany.com -a true -s false
-
-# Apply with interactive org selection (no org flag provided)
-gh security-config apply --template-org my-template-org
 
 # Use concurrent processing for faster execution (up to 20 organizations at once)
 gh security-config generate --all-orgs --concurrency 5
@@ -105,20 +98,6 @@ gh security-config generate --all-orgs --concurrency 5
 # Use delayed processing to avoid rate limits and reduce system overhead (30 second delay between organizations)
 gh security-config generate --org-list orgs.csv --delay 30
 ```
-
-### Organization Targeting
-
-All commands require exactly one of three mutually exclusive organization targeting options:
-
-| Flag | Description |
-|------|-------------|
-| `--org <name>` | Target a single organization by name |
-| `--org-list <path>` (`-l`) | Target organizations listed in a CSV file (one per line, no header) |
-| `--all-orgs` | Target all organizations in the enterprise |
-
-- **CSV Format**: Create a CSV file with one organization name per line (no header row required)
-- **Example CSV**: See [example-organizations.csv](example-organizations.csv) for the correct format
-- **Error Handling**: If an organization is not found or accessible, the tool will show a warning and continue with other organizations
 
 ### Copying Security Configurations
 
@@ -151,6 +130,10 @@ Process multiple organizations simultaneously to improve performance:
 - **Usage**: Available on all commands (`generate`, `apply`, `modify`, `delete`)
 - **Benefits**: Significantly reduces total processing time for large numbers of organizations
 
+> [!WARNING]
+> **Rate Limiting Considerations**: Setting concurrency higher than 1 increases the likelihood of encountering GitHub's secondary rate limits. To avoid rate limiting issues, consider [exempting the user from rate limits](https://docs.github.com/en/enterprise-server@3.15/admin/administering-your-instance/administering-your-instance-from-the-command-line/command-line-utilities#ghe-config).
+
+
 #### Sequential Processing with Delay (`--delay`)
 
 Process organizations one at a time with a configurable delay between each:
@@ -158,23 +141,6 @@ Process organizations one at a time with a configurable delay between each:
 - **Range**: `1-600` seconds (validated to prevent unreasonable delays)
 - **Usage**: Available on all commands (`generate`, `apply`, `modify`, `delete`)
 - **Benefits**: Helps avoid rate limiting issues and provides controlled processing pace
-
-#### Mutual Exclusivity
-
-The `--concurrency` and `--delay` flags are mutually exclusive:
-
-- **Cannot use both**: You must choose either concurrent processing OR sequential processing with delay
-- **Default behavior**: When neither flag is specified, processing runs sequentially without delay (concurrency=1, delay=0)
-
-#### Performance Benefits
-
-- **Concurrent Mode**: Faster execution for time-sensitive operations
-- **Delayed Mode**: Better for rate limit management and controlled processing
-- **Configurable**: Choose the mode based on your needs and environment constraints
-- **Progress Tracking**: Real-time progress updates work seamlessly with both processing modes
-
-> [!WARNING]
-> **Rate Limiting Considerations**: Setting concurrency higher than 1 increases the likelihood of encountering GitHub's secondary rate limits. To avoid rate limiting issues, consider [exempting the user from rate limits](https://docs.github.com/en/enterprise-server@3.15/admin/administering-your-instance/administering-your-instance-from-the-command-line/command-line-utilities#ghe-config).
 
 ### Error Handling and Requirements
 
