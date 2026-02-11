@@ -37,35 +37,6 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// If no org targeting method is provided, prompt user to select one
-	if !utils.HasOrgTargeting(commonFlags) {
-		targetingMethod, err := ui.SelectOrgTargetingMethod()
-		if err != nil {
-			return err
-		}
-
-		switch targetingMethod {
-		case "all-orgs":
-			commonFlags.AllOrgs = true
-		case "single-org":
-			orgName, err := ui.GetSingleOrgName()
-			if err != nil {
-				return err
-			}
-			commonFlags.Org = orgName
-		case "org-list":
-			csvPath, err := ui.GetOrgListPath()
-			if err != nil {
-				return err
-			}
-			commonFlags.OrgListPath = csvPath
-			// Validate the CSV file
-			if err := utils.ValidateOrgFlagsOptional(commonFlags); err != nil {
-				return err
-			}
-		}
-	}
-
 	// Validate concurrency and delay flags
 	if err := utils.ValidateConcurrency(commonFlags.Concurrency); err != nil {
 		return err
@@ -107,6 +78,65 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	// Set hostname if using GitHub Enterprise Server
 	ui.SetupGitHubHost(serverURL)
+
+	// Get GHES version from /meta endpoint to determine if enterprise configurations are available
+	pterm.Info.Println("Detecting GitHub Enterprise Server version...")
+	ghesVersion, err := api.GetGHESVersion()
+	var enterpriseConfigCount int
+	if err != nil {
+		pterm.Warning.Printf("Could not detect GHES version: %v\n", err)
+		pterm.Info.Println("Assuming enterprise configurations are not available")
+		ghesVersion = ""
+	} else if ghesVersion != "" {
+		pterm.Success.Printf("Detected GHES version: %s\n", ghesVersion)
+	}
+
+	// Fetch enterprise configurations if GHES 3.16+
+	if api.SupportsEnterpriseConfigurations(ghesVersion) {
+		pterm.Info.Println("Fetching enterprise security configurations...")
+		enterpriseConfigs, err := api.FetchEnterpriseSecurityConfigurations(enterprise)
+		if err != nil {
+			pterm.Warning.Printf("Could not fetch enterprise configurations: %v\n", err)
+		} else {
+			enterpriseConfigCount = len(enterpriseConfigs)
+			if enterpriseConfigCount > 0 {
+				pterm.Success.Printf("Found %d enterprise security configuration(s)\n", enterpriseConfigCount)
+			}
+		}
+	}
+
+	// If no org targeting method is provided, prompt user to select one
+	if !utils.HasOrgTargeting(commonFlags) {
+		if enterpriseConfigCount > 0 {
+			pterm.Info.Println("Organization-level security configurations deleted by this command will not affect existing enterprise configurations.")
+		}
+
+		targetingMethod, err := ui.SelectOrgTargetingMethod()
+		if err != nil {
+			return err
+		}
+
+		switch targetingMethod {
+		case "all-orgs":
+			commonFlags.AllOrgs = true
+		case "single-org":
+			orgName, err := ui.GetSingleOrgName()
+			if err != nil {
+				return err
+			}
+			commonFlags.Org = orgName
+		case "org-list":
+			csvPath, err := ui.GetOrgListPath()
+			if err != nil {
+				return err
+			}
+			commonFlags.OrgListPath = csvPath
+			// Validate the CSV file
+			if err := utils.ValidateOrgFlagsOptional(commonFlags); err != nil {
+				return err
+			}
+		}
+	}
 
 	// Get template organization name
 	templateOrg, err := ui.GetTemplateOrgInput(templateOrgFlag)

@@ -42,35 +42,6 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// If no org targeting method is provided, prompt user to select one
-	if !utils.HasOrgTargeting(commonFlags) {
-		targetingMethod, err := ui.SelectOrgTargetingMethod()
-		if err != nil {
-			return err
-		}
-
-		switch targetingMethod {
-		case "all-orgs":
-			commonFlags.AllOrgs = true
-		case "single-org":
-			orgName, err := ui.GetSingleOrgName()
-			if err != nil {
-				return err
-			}
-			commonFlags.Org = orgName
-		case "org-list":
-			csvPath, err := ui.GetOrgListPath()
-			if err != nil {
-				return err
-			}
-			commonFlags.OrgListPath = csvPath
-			// Validate the CSV file
-			if err := utils.ValidateOrgFlagsOptional(commonFlags); err != nil {
-				return err
-			}
-		}
-	}
-
 	// Validate concurrency and delay flags
 	if err := utils.ValidateConcurrency(commonFlags.Concurrency); err != nil {
 		return err
@@ -113,36 +84,15 @@ func runApply(cmd *cobra.Command, args []string) error {
 	// Set hostname if using GitHub Enterprise Server
 	ui.SetupGitHubHost(serverURL)
 
-	// Get template organization name
-	templateOrg, err := ui.GetTemplateOrgInput(templateOrgFlag)
-	if err != nil {
-		return err
-	}
-
-	pterm.Info.Printf("Using template organization: %s\n", templateOrg)
-
 	// Get GHES version from /meta endpoint to determine if enterprise configurations are available
 	pterm.Info.Println("Detecting GitHub Enterprise Server version...")
 	ghesVersion, err := api.GetGHESVersion()
 	if err != nil {
 		pterm.Warning.Printf("Could not detect GHES version: %v\n", err)
-		pterm.Info.Println("Assuming GitHub Enterprise Cloud (GHEC) or enterprise configurations not available")
+		pterm.Info.Println("Assuming enterprise configurations are not available")
 		ghesVersion = ""
 	} else if ghesVersion != "" {
 		pterm.Success.Printf("Detected GHES version: %s\n", ghesVersion)
-	} else {
-		pterm.Info.Println("Detected GitHub Enterprise Cloud (GHEC)")
-	}
-
-	// Fetch organizations
-	orgs, err := api.GetOrganizations(enterprise, commonFlags.Org, commonFlags.OrgListPath, commonFlags.AllOrgs)
-	if err != nil {
-		return err
-	}
-
-	if len(orgs) == 0 {
-		ui.ShowNoOrganizationsWarning(commonFlags)
-		return nil
 	}
 
 	// Collect available configurations from both enterprise and template organization
@@ -166,6 +116,47 @@ func runApply(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
+
+	// If no org targeting method is provided, prompt user to select one
+	if !utils.HasOrgTargeting(commonFlags) {
+		if len(enterpriseConfigNames) > 0 {
+			pterm.Info.Println("Organization-level security configurations applied by this command will be in addition to existing enterprise configurations.")
+		}
+
+		targetingMethod, err := ui.SelectOrgTargetingMethod()
+		if err != nil {
+			return err
+		}
+
+		switch targetingMethod {
+		case "all-orgs":
+			commonFlags.AllOrgs = true
+		case "single-org":
+			orgName, err := ui.GetSingleOrgName()
+			if err != nil {
+				return err
+			}
+			commonFlags.Org = orgName
+		case "org-list":
+			csvPath, err := ui.GetOrgListPath()
+			if err != nil {
+				return err
+			}
+			commonFlags.OrgListPath = csvPath
+			// Validate the CSV file
+			if err := utils.ValidateOrgFlagsOptional(commonFlags); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Get template organization name
+	templateOrg, err := ui.GetTemplateOrgInput(templateOrgFlag)
+	if err != nil {
+		return err
+	}
+
+	pterm.Info.Printf("Using template organization: %s\n", templateOrg)
 
 	// Fetch org-level configuration names from template organization only
 	pterm.Info.Printf("Fetching security configurations from template organization '%s'...\n", templateOrg)
@@ -203,6 +194,17 @@ func runApply(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		return fmt.Errorf("no security configurations found at enterprise or organization level")
+	}
+
+	// Fetch organizations
+	orgs, err := api.GetOrganizations(enterprise, commonFlags.Org, commonFlags.OrgListPath, commonFlags.AllOrgs)
+	if err != nil {
+		return err
+	}
+
+	if len(orgs) == 0 {
+		ui.ShowNoOrganizationsWarning(commonFlags)
+		return nil
 	}
 
 	// Get configuration details based on target type
