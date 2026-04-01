@@ -224,11 +224,11 @@ When attaching configurations to repositories, you can choose:
 
 ### Create and apply a new organization security configuration in every org
 
-https://github.com/user-attachments/assets/d10ffa25-9f68-4c03-9942-67ff7fc7b4c6
+![Generate demo](demo/generate.gif)
 
 ### Apply an existing enterprise configuration in every org
 
-https://github.com/user-attachments/assets/44049aa8-2b14-453a-83ee-70a866bd7bbd
+![Apply demo](demo/apply.gif)
 
 ## Development
 
