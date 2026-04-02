@@ -57,7 +57,7 @@ These flags are available on all commands:
 - **`--concurrency int`** (`-c`) - Number of concurrent requests (1-20, default: 1, mutually exclusive with `--delay`)
 - **`--delay int`** (`-d`) - Delay in seconds between organizations (1-600, mutually exclusive with `--concurrency`)
 - **`--enterprise-slug string`** (`-e`) - GitHub Enterprise slug (e.g., github)
-- **`--github-enterprise-server-url string`** (`-u`) - GitHub Enterprise Server URL (e.g., github.company.com)
+- **`--github-enterprise-server-url string`** (`-u`) - GitHub Enterprise URL (e.g., github.company.com)
 - **`--dependabot-alerts-available string`** (`-a`) - Whether Dependabot Alerts are available in your GHES instance (true/false)
 - **`--dependabot-security-updates-available string`** (`-s`) - Whether Dependabot Security Updates are available in your GHES instance (true/false)
 

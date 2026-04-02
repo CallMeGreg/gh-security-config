@@ -26,7 +26,7 @@ func init() {
 	rootCmd.PersistentFlags().IntP("concurrency", "c", 1, "Number of concurrent requests (1-20)")
 	rootCmd.PersistentFlags().IntP("delay", "d", 0, "Delay in seconds between organizations (1-600, mutually exclusive with --concurrency)")
 	rootCmd.PersistentFlags().StringP("enterprise-slug", "e", "", "GitHub Enterprise slug (e.g., github)")
-	rootCmd.PersistentFlags().StringP("github-enterprise-server-url", "u", "", "GitHub Enterprise Server URL (e.g., github.company.com)")
+	rootCmd.PersistentFlags().StringP("github-enterprise-server-url", "u", "", "GitHub Enterprise URL (e.g., github.company.com)")
 	rootCmd.PersistentFlags().StringP("dependabot-alerts-available", "a", "", "Whether Dependabot Alerts are available in your GHES instance (true/false)")
 	rootCmd.PersistentFlags().StringP("dependabot-security-updates-available", "s", "", "Whether Dependabot Security Updates are available in your GHES instance (true/false)")
 
