@@ -9,7 +9,7 @@ import (
 
 // GetSecurityConfigInput prompts for security configuration name and description
 func GetSecurityConfigInput() (string, string, error) {
-	name, err := pterm.DefaultInteractiveTextInput.WithDefaultText("Enterprise Security Configuration").WithMultiLine(false).Show("Enter security configuration name")
+	name, err := pterm.DefaultInteractiveTextInput.WithDefaultText("Security Configuration").WithMultiLine(false).Show("Enter security configuration name")
 	if err != nil {
 		return "", "", err
 	}

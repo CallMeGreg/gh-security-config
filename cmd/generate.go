@@ -26,7 +26,7 @@ func init() {
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
-	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgBlue)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Enterprise Security Configuration Generator")
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgBlue)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Security Configuration Generator")
 	pterm.Println()
 
 	// Extract common flags
@@ -79,7 +79,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Get GitHub Enterprise Server URL if needed
+	// Get GitHub Enterprise URL if needed
 	serverURL, err := ui.GetServerURLInput(serverURLFlag)
 	if err != nil {
 		return err
