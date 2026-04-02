@@ -28,7 +28,7 @@ func init() {
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
-	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgCyan)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Security Configuration Application")
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgCyan)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Security Configuration Applier")
 	pterm.Println()
 
 	// Extract common flags
