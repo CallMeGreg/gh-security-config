@@ -28,21 +28,21 @@ func GetEnterpriseInput(enterpriseFlag string) (string, error) {
 	return strings.TrimSpace(enterprise), nil
 }
 
-// GetServerURLInput prompts for GitHub Enterprise Server URL (assumes GHES since this tool is GHES-only)
+// GetServerURLInput prompts for GitHub Enterprise URL
 func GetServerURLInput(serverURLFlag string) (string, error) {
 	// If server URL is provided via flag, use it
 	if strings.TrimSpace(serverURLFlag) != "" {
 		return strings.TrimSpace(serverURLFlag), nil
 	}
 
-	// Since this tool is GHES-only, always prompt for server URL
-	serverURL, err := pterm.DefaultInteractiveTextInput.WithDefaultText("").WithMultiLine(false).Show("Enter your GitHub Enterprise Server URL (e.g., github.company.com)")
+	// Prompt for server URL
+	serverURL, err := pterm.DefaultInteractiveTextInput.WithDefaultText("").WithMultiLine(false).Show("Enter your GitHub Enterprise URL (e.g., github.company.com)")
 	if err != nil {
 		return "", err
 	}
 
 	if strings.TrimSpace(serverURL) == "" {
-		return "", fmt.Errorf("GitHub Enterprise Server URL is required")
+		return "", fmt.Errorf("GitHub Enterprise URL is required")
 	}
 
 	return strings.TrimSpace(serverURL), nil
