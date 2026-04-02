@@ -226,7 +226,7 @@ When attaching configurations to repositories, you can choose:
 
 ![Generate demo](demo/generate.gif)
 
-### Apply an existing enterprise configuration in every org
+### Apply an existing organization configuration to all repos across every org
 
 ![Apply demo](demo/apply.gif)
 
