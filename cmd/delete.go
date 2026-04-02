@@ -23,7 +23,7 @@ func init() {
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
-	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgRed)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Security Configuration Deletion")
+	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgRed)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("GitHub Security Configuration Deleter")
 	pterm.Println()
 
 	// Extract common flags
