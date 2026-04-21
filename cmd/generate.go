@@ -23,6 +23,17 @@ func init() {
 	// Command-specific flags
 	generateCmd.Flags().BoolP("force", "f", false, "Force deletion of existing configurations with the same name before creating new ones")
 	generateCmd.Flags().StringP("copy-from-org", "o", "", "Organization name to copy an existing configuration from")
+
+	// Non-interactive input flags
+	generateCmd.Flags().StringP("config-name", "n", "", "Name for the new security configuration (when using --copy-from-org, the name of the source configuration to copy)")
+	generateCmd.Flags().String("config-description", "", "Description for the new security configuration")
+
+	// Security settings (shared with modify)
+	addSecuritySettingFlags(generateCmd)
+
+	// Application options
+	generateCmd.Flags().String("scope", "", "Repository attachment scope (all, public, private_or_internal, none)")
+	generateCmd.Flags().String("set-as-default", "", "Whether to set this configuration as default for new repositories (true/false)")
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
@@ -47,6 +58,43 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 
 	copyFromOrg, err := cmd.Flags().GetString("copy-from-org")
+	if err != nil {
+		return err
+	}
+
+	configNameFlag, err := cmd.Flags().GetString("config-name")
+	if err != nil {
+		return err
+	}
+	configDescriptionFlag, err := cmd.Flags().GetString("config-description")
+	if err != nil {
+		return err
+	}
+
+	scopeFlag, err := cmd.Flags().GetString("scope")
+	if err != nil {
+		return err
+	}
+	if err := utils.ValidateEnumValue("scope", scopeFlag, []string{"all", "public", "private_or_internal", "none"}); err != nil {
+		return err
+	}
+
+	setAsDefaultFlag, err := cmd.Flags().GetString("set-as-default")
+	if err != nil {
+		return err
+	}
+	setAsDefaultOverride, err := utils.ParseBoolStringFlag("set-as-default", setAsDefaultFlag)
+	if err != nil {
+		return err
+	}
+
+	yesFlag, err := cmd.Flags().GetBool("yes")
+	if err != nil {
+		return err
+	}
+
+	// Read security setting overrides
+	settingsOverrides, err := extractSecuritySettingOverrides(cmd)
 	if err != nil {
 		return err
 	}
@@ -164,35 +212,39 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		}
 
 		// Copy configuration logic
-		configName, configDescription, settings, scope, setAsDefault, err = ui.HandleCopyFromOrg(copyFromOrg)
+		configName, configDescription, settings, scope, setAsDefault, err = ui.HandleCopyFromOrg(copyFromOrg, ui.CopyFromOrgOverrides{
+			ConfigName:   configNameFlag,
+			Scope:        scopeFlag,
+			SetAsDefault: setAsDefaultOverride,
+		})
 		if err != nil {
 			return err
 		}
 	} else {
 		// Original logic for creating new configuration
-		configName, configDescription, err = ui.GetSecurityConfigInput()
+		configName, configDescription, err = ui.GetSecurityConfigInput(configNameFlag, configDescriptionFlag)
 		if err != nil {
 			return err
 		}
 
-		settings, err = ui.GetSecuritySettings(dependabotAlertsAvailable, dependabotSecurityUpdatesAvailable)
+		settings, err = ui.GetSecuritySettings(settingsOverrides, dependabotAlertsAvailable, dependabotSecurityUpdatesAvailable)
 		if err != nil {
 			return err
 		}
 
-		scope, err = ui.GetAttachmentScope()
+		scope, err = ui.GetAttachmentScope(scopeFlag)
 		if err != nil {
 			return err
 		}
 
-		setAsDefault, err = ui.GetDefaultSetting()
+		setAsDefault, err = ui.GetDefaultSetting(setAsDefaultOverride)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Confirm before proceeding
-	confirmed, err := ui.ConfirmOperation(orgs, configName, configDescription, settings, scope, setAsDefault)
+	confirmed, err := ui.ConfirmOperation(orgs, configName, configDescription, settings, scope, setAsDefault, yesFlag)
 	if err != nil {
 		return err
 	}
@@ -235,6 +287,26 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		"concurrency":                           commonFlags.Concurrency,
 		"delay":                                 commonFlags.Delay,
 		"force":                                 force,
+		"config-name":                           configName,
+		"scope":                                 scope,
+		"set-as-default":                        fmt.Sprintf("%t", setAsDefault),
+		"yes":                                   yesFlag,
+	}
+	if copyFromOrg == "" {
+		// config-description is only meaningful for newly created configurations
+		replicationFlags["config-description"] = configDescription
+		// Include each security setting as a flag so the command is fully reproducible
+		replicationFlags["advanced-security"] = fmt.Sprintf("%v", settings["advanced_security"])
+		if v, ok := settings["dependabot_alerts"]; ok {
+			replicationFlags["dependabot-alerts"] = fmt.Sprintf("%v", v)
+		}
+		if v, ok := settings["dependabot_security_updates"]; ok {
+			replicationFlags["dependabot-security-updates"] = fmt.Sprintf("%v", v)
+		}
+		replicationFlags["secret-scanning"] = fmt.Sprintf("%v", settings["secret_scanning"])
+		replicationFlags["secret-scanning-push-protection"] = fmt.Sprintf("%v", settings["secret_scanning_push_protection"])
+		replicationFlags["secret-scanning-non-provider-patterns"] = fmt.Sprintf("%v", settings["secret_scanning_non_provider_patterns"])
+		replicationFlags["enforcement"] = fmt.Sprintf("%v", settings["enforcement"])
 	}
 
 	// Add org targeting flags

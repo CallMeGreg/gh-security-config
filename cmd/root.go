@@ -29,6 +29,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP("github-enterprise-server-url", "u", "", "GitHub Enterprise URL (e.g., github.company.com)")
 	rootCmd.PersistentFlags().StringP("dependabot-alerts-available", "a", "", "Whether Dependabot Alerts are available in your GHES instance (true/false)")
 	rootCmd.PersistentFlags().StringP("dependabot-security-updates-available", "s", "", "Whether Dependabot Security Updates are available in your GHES instance (true/false)")
+	rootCmd.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts (useful for non-interactive / scripted usage)")
 
 	// Mark org targeting flags as mutually exclusive
 	rootCmd.MarkFlagsMutuallyExclusive("org", "org-list", "all-orgs")

@@ -9,8 +9,9 @@ import (
 	"github.com/callmegreg/gh-security-config/internal/types"
 )
 
-// ConfirmOperation shows operation summary and asks for confirmation
-func ConfirmOperation(orgs []string, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool) (bool, error) {
+// ConfirmOperation shows operation summary and asks for confirmation. If skipConfirm is true,
+// the summary is shown and true is returned without prompting.
+func ConfirmOperation(orgs []string, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool, skipConfirm bool) (bool, error) {
 	pterm.Println()
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgYellow)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Println("Operation Summary")
 
@@ -43,6 +44,11 @@ func ConfirmOperation(orgs []string, configName, configDescription string, setti
 	pterm.Printf("Set as Default: %s\n", pterm.Cyan(fmt.Sprintf("%t", setAsDefault)))
 	pterm.Println()
 
+	if skipConfirm {
+		pterm.Info.Println("--yes flag provided: skipping confirmation prompt.")
+		return true, nil
+	}
+
 	confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Proceed with creating security configurations?").Show()
 	if err != nil {
 		return false, err
@@ -51,8 +57,9 @@ func ConfirmOperation(orgs []string, configName, configDescription string, setti
 	return confirmed, nil
 }
 
-// ConfirmDeleteOperation shows delete summary and asks for confirmation
-func ConfirmDeleteOperation(orgs []string, configName string) (bool, error) {
+// ConfirmDeleteOperation shows delete summary and asks for confirmation. If skipConfirm is true,
+// the summary is shown and true is returned without prompting.
+func ConfirmDeleteOperation(orgs []string, configName string, skipConfirm bool) (bool, error) {
 	pterm.Println()
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgRed)).WithTextStyle(pterm.NewStyle(pterm.FgWhite)).Println("DELETE OPERATION SUMMARY")
 
@@ -64,6 +71,11 @@ func ConfirmDeleteOperation(orgs []string, configName string) (bool, error) {
 	pterm.Warning.Println("This action cannot be undone. Repositories will retain their settings but will no longer be associated with the configuration.")
 	pterm.Println()
 
+	if skipConfirm {
+		pterm.Info.Println("--yes flag provided: skipping confirmation prompt.")
+		return true, nil
+	}
+
 	confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Are you absolutely sure you want to proceed with deleting this configuration?").WithDefaultValue(false).Show()
 	if err != nil {
 		return false, err
@@ -72,8 +84,9 @@ func ConfirmDeleteOperation(orgs []string, configName string) (bool, error) {
 	return confirmed, nil
 }
 
-// ConfirmModifyOperation shows modify summary and asks for confirmation
-func ConfirmModifyOperation(orgs []string, configName, newName, currentDescription, newDescription string, currentSettings, newSettings map[string]interface{}) (bool, error) {
+// ConfirmModifyOperation shows modify summary and asks for confirmation. If skipConfirm is true,
+// the summary is shown and true is returned without prompting.
+func ConfirmModifyOperation(orgs []string, configName, newName, currentDescription, newDescription string, currentSettings, newSettings map[string]interface{}, skipConfirm bool) (bool, error) {
 	pterm.Println()
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgYellow)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Println("MODIFY OPERATION SUMMARY")
 
@@ -112,6 +125,11 @@ func ConfirmModifyOperation(orgs []string, configName, newName, currentDescripti
 
 	pterm.Println()
 
+	if skipConfirm {
+		pterm.Info.Println("--yes flag provided: skipping confirmation prompt.")
+		return true, nil
+	}
+
 	confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Proceed with modifying security configurations?").Show()
 	if err != nil {
 		return false, err
@@ -120,8 +138,16 @@ func ConfirmModifyOperation(orgs []string, configName, newName, currentDescripti
 	return confirmed, nil
 }
 
-// HandleCopyFromOrg handles the copy-from-org functionality
-func HandleCopyFromOrg(copyFromOrg string) (string, string, map[string]interface{}, string, bool, error) {
+// CopyFromOrgOverrides holds optional pre-supplied values for the copy-from-org flow.
+type CopyFromOrgOverrides struct {
+	ConfigName   string // Name of the source configuration to copy
+	Scope        string // Attachment scope override
+	SetAsDefault *bool  // Set-as-default override
+}
+
+// HandleCopyFromOrg handles the copy-from-org functionality. Any non-empty fields on overrides
+// are used instead of prompting the user.
+func HandleCopyFromOrg(copyFromOrg string, overrides CopyFromOrgOverrides) (string, string, map[string]interface{}, string, bool, error) {
 	pterm.Info.Printf("Fetching security configurations from organization '%s'...\n", copyFromOrg)
 
 	// Check if user has access to the source organization
@@ -146,22 +172,36 @@ func HandleCopyFromOrg(copyFromOrg string) (string, string, map[string]interface
 		return "", "", nil, "", false, fmt.Errorf("no security configurations found in organization '%s'", copyFromOrg)
 	}
 
-	// Present configurations for selection
-	var configOptions []string
-	configMap := make(map[string]types.SecurityConfiguration)
-	for _, config := range configs {
-		displayName := fmt.Sprintf("%s - %s", config.Name, config.Description)
-		configOptions = append(configOptions, displayName)
-		configMap[displayName] = config
-	}
+	// Select configuration: via override or interactively
+	var selectedConfigData types.SecurityConfiguration
+	if overrides.ConfigName != "" {
+		found := false
+		for _, config := range configs {
+			if config.Name == overrides.ConfigName {
+				selectedConfigData = config
+				found = true
+				break
+			}
+		}
+		if !found {
+			return "", "", nil, "", false, fmt.Errorf("configuration %q not found in organization '%s'", overrides.ConfigName, copyFromOrg)
+		}
+	} else {
+		// Present configurations for selection
+		var configOptions []string
+		configMap := make(map[string]types.SecurityConfiguration)
+		for _, config := range configs {
+			displayName := fmt.Sprintf("%s - %s", config.Name, config.Description)
+			configOptions = append(configOptions, displayName)
+			configMap[displayName] = config
+		}
 
-	selectedConfig, err := pterm.DefaultInteractiveSelect.WithOptions(configOptions).Show("Select a configuration to copy")
-	if err != nil {
-		return "", "", nil, "", false, err
+		selectedConfig, err := pterm.DefaultInteractiveSelect.WithOptions(configOptions).Show("Select a configuration to copy")
+		if err != nil {
+			return "", "", nil, "", false, err
+		}
+		selectedConfigData = configMap[selectedConfig]
 	}
-
-	// Get the selected configuration details
-	selectedConfigData := configMap[selectedConfig]
 
 	// Get detailed configuration including settings
 	configDetails, err := api.GetSecurityConfigurationDetails(copyFromOrg, selectedConfigData.ID)
@@ -177,13 +217,13 @@ func HandleCopyFromOrg(copyFromOrg string) (string, string, map[string]interface
 	pterm.Println()
 
 	// Ask for attachment scope (this might be different for target organizations)
-	scope, err := GetAttachmentScope()
+	scope, err := GetAttachmentScope(overrides.Scope)
 	if err != nil {
 		return "", "", nil, "", false, err
 	}
 
 	// Ask about setting as default (this might be different for target organizations)
-	setAsDefault, err := GetDefaultSetting()
+	setAsDefault, err := GetDefaultSetting(overrides.SetAsDefault)
 	if err != nil {
 		return "", "", nil, "", false, err
 	}
@@ -191,8 +231,9 @@ func HandleCopyFromOrg(copyFromOrg string) (string, string, map[string]interface
 	return selectedConfigData.Name, configDetails.Description, configDetails.Settings, scope, setAsDefault, nil
 }
 
-// ConfirmApplyOperation shows operation summary and asks for confirmation for apply command
-func ConfirmApplyOperation(orgs []string, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool) (bool, error) {
+// ConfirmApplyOperation shows operation summary and asks for confirmation for apply command.
+// If skipConfirm is true, the summary is shown and true is returned without prompting.
+func ConfirmApplyOperation(orgs []string, configName, configDescription string, settings map[string]interface{}, scope string, setAsDefault bool, skipConfirm bool) (bool, error) {
 	pterm.Println()
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgYellow)).WithTextStyle(pterm.NewStyle(pterm.FgBlack)).Println("Apply Operation Summary")
 
@@ -224,6 +265,11 @@ func ConfirmApplyOperation(orgs []string, configName, configDescription string, 
 	pterm.Printf("Attachment Scope: %s\n", pterm.Magenta(scope))
 	pterm.Printf("Set as Default: %s\n", pterm.Cyan(fmt.Sprintf("%t", setAsDefault)))
 	pterm.Println()
+
+	if skipConfirm {
+		pterm.Info.Println("--yes flag provided: skipping confirmation prompt.")
+		return true, nil
+	}
 
 	confirmed, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Proceed with applying security configuration to repositories?").Show()
 	if err != nil {

@@ -7,24 +7,33 @@ import (
 	"github.com/pterm/pterm"
 )
 
-// GetSecurityConfigInput prompts for security configuration name and description
-func GetSecurityConfigInput() (string, string, error) {
-	name, err := pterm.DefaultInteractiveTextInput.WithDefaultText("Security Configuration").WithMultiLine(false).Show("Enter security configuration name")
-	if err != nil {
-		return "", "", err
+// GetSecurityConfigInput prompts for security configuration name and description.
+// If nameOverride or descriptionOverride are non-empty, they are used instead of prompting.
+func GetSecurityConfigInput(nameOverride, descriptionOverride string) (string, string, error) {
+	var name string
+	if strings.TrimSpace(nameOverride) != "" {
+		name = strings.TrimSpace(nameOverride)
+	} else {
+		n, err := pterm.DefaultInteractiveTextInput.WithDefaultText("Security Configuration").WithMultiLine(false).Show("Enter security configuration name")
+		if err != nil {
+			return "", "", err
+		}
+		name = strings.TrimSpace(n)
 	}
-
-	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", "", fmt.Errorf("configuration name is required")
 	}
 
-	description, err := pterm.DefaultInteractiveTextInput.WithDefaultText("Security configuration applied across enterprise organizations").WithMultiLine(false).Show("Enter security configuration description")
-	if err != nil {
-		return "", "", err
+	var description string
+	if strings.TrimSpace(descriptionOverride) != "" {
+		description = strings.TrimSpace(descriptionOverride)
+	} else {
+		d, err := pterm.DefaultInteractiveTextInput.WithDefaultText("Security configuration applied across enterprise organizations").WithMultiLine(false).Show("Enter security configuration description")
+		if err != nil {
+			return "", "", err
+		}
+		description = strings.TrimSpace(d)
 	}
-
-	description = strings.TrimSpace(description)
 	if description == "" {
 		return "", "", fmt.Errorf("configuration description is required")
 	}
@@ -32,14 +41,51 @@ func GetSecurityConfigInput() (string, string, error) {
 	return name, description, nil
 }
 
-// GetSecuritySettings prompts for security settings configuration
-func GetSecuritySettings(dependabotAlertsAvailable bool, dependabotSecurityUpdatesAvailable bool) (map[string]interface{}, error) {
+// SecuritySettingOverrides holds optional pre-supplied values for security settings.
+// Any field left empty will fall back to interactive prompting.
+type SecuritySettingOverrides struct {
+	AdvancedSecurity                  string
+	DependabotAlerts                  string
+	DependabotSecurityUpdates         string
+	SecretScanning                    string
+	SecretScanningPushProtection      string
+	SecretScanningNonProviderPatterns string
+	Enforcement                       string
+}
+
+// selectWithOverride validates an override (if provided) against allowed options.
+// If the override is empty, it prompts the user with the given label and default.
+func selectWithOverride(label, override string, options []string, defaultOption string) (string, error) {
+	if override != "" {
+		for _, o := range options {
+			if o == override {
+				return override, nil
+			}
+		}
+		return "", fmt.Errorf("invalid value %q for %s (must be one of: %s)", override, label, strings.Join(options, ", "))
+	}
+	return pterm.DefaultInteractiveSelect.WithOptions(options).WithDefaultOption(defaultOption).Show(label)
+}
+
+// GetSecuritySettings prompts for security settings configuration. Any non-empty field on
+// overrides is used directly without prompting the user.
+func GetSecuritySettings(overrides SecuritySettingOverrides, dependabotAlertsAvailable bool, dependabotSecurityUpdatesAvailable bool) (map[string]interface{}, error) {
 	settings := make(map[string]interface{})
 
-	pterm.Info.Println("Configure security settings:")
+	// Only show the header if at least one setting will actually be prompted for
+	needsPrompt := overrides.AdvancedSecurity == "" ||
+		(dependabotAlertsAvailable && overrides.DependabotAlerts == "") ||
+		(dependabotSecurityUpdatesAvailable && overrides.DependabotSecurityUpdates == "") ||
+		overrides.SecretScanning == "" ||
+		overrides.SecretScanningPushProtection == "" ||
+		overrides.SecretScanningNonProviderPatterns == "" ||
+		overrides.Enforcement == ""
+	if needsPrompt {
+		pterm.Info.Println("Configure security settings:")
+	}
 
 	// Advanced Security
-	advancedSecurity, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled"}).WithDefaultOption("enabled").Show("GitHub Advanced Security")
+	advancedSecurity, err := selectWithOverride("GitHub Advanced Security", overrides.AdvancedSecurity, []string{"enabled", "disabled"}, "enabled")
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +93,7 @@ func GetSecuritySettings(dependabotAlertsAvailable bool, dependabotSecurityUpdat
 
 	// Dependabot Alerts (only if available)
 	if dependabotAlertsAvailable {
-		dependabotAlerts, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("not_set").Show("Dependabot Alerts")
+		dependabotAlerts, err := selectWithOverride("Dependabot Alerts", overrides.DependabotAlerts, []string{"enabled", "disabled", "not_set"}, "not_set")
 		if err != nil {
 			return nil, err
 		}
@@ -56,7 +102,7 @@ func GetSecuritySettings(dependabotAlertsAvailable bool, dependabotSecurityUpdat
 
 	// Dependabot Security Updates (only if available)
 	if dependabotSecurityUpdatesAvailable {
-		dependabotSecurityUpdates, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("not_set").Show("Dependabot Security Updates")
+		dependabotSecurityUpdates, err := selectWithOverride("Dependabot Security Updates", overrides.DependabotSecurityUpdates, []string{"enabled", "disabled", "not_set"}, "not_set")
 		if err != nil {
 			return nil, err
 		}
@@ -64,28 +110,28 @@ func GetSecuritySettings(dependabotAlertsAvailable bool, dependabotSecurityUpdat
 	}
 
 	// Secret Scanning
-	secretScanning, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("enabled").Show("Secret Scanning")
+	secretScanning, err := selectWithOverride("Secret Scanning", overrides.SecretScanning, []string{"enabled", "disabled", "not_set"}, "enabled")
 	if err != nil {
 		return nil, err
 	}
 	settings["secret_scanning"] = secretScanning
 
 	// Secret Scanning Push Protection
-	pushProtection, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("enabled").Show("Secret Scanning Push Protection")
+	pushProtection, err := selectWithOverride("Secret Scanning Push Protection", overrides.SecretScanningPushProtection, []string{"enabled", "disabled", "not_set"}, "enabled")
 	if err != nil {
 		return nil, err
 	}
 	settings["secret_scanning_push_protection"] = pushProtection
 
 	// Secret Scanning Non-Provider Patterns
-	nonProviderPatterns, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enabled", "disabled", "not_set"}).WithDefaultOption("not_set").Show("Secret Scanning Non-Provider Patterns")
+	nonProviderPatterns, err := selectWithOverride("Secret Scanning Non-Provider Patterns", overrides.SecretScanningNonProviderPatterns, []string{"enabled", "disabled", "not_set"}, "not_set")
 	if err != nil {
 		return nil, err
 	}
 	settings["secret_scanning_non_provider_patterns"] = nonProviderPatterns
 
 	// Enforcement
-	enforcement, err := pterm.DefaultInteractiveSelect.WithOptions([]string{"enforced", "unenforced"}).WithDefaultOption("enforced").Show("Enforcement Status")
+	enforcement, err := selectWithOverride("Enforcement Status", overrides.Enforcement, []string{"enforced", "unenforced"}, "enforced")
 	if err != nil {
 		return nil, err
 	}
@@ -94,14 +140,19 @@ func GetSecuritySettings(dependabotAlertsAvailable bool, dependabotSecurityUpdat
 	return settings, nil
 }
 
-// GetAttachmentScope prompts for repository attachment scope
-func GetAttachmentScope() (string, error) {
-	scope, err := pterm.DefaultInteractiveSelect.WithOptions([]string{
-		"all",
-		"public",
-		"private_or_internal",
-		"none",
-	}).WithDefaultOption("all").Show("Select repositories to attach configuration to")
+// GetAttachmentScope prompts for repository attachment scope. If override is non-empty,
+// it is validated and used directly.
+func GetAttachmentScope(override string) (string, error) {
+	options := []string{"all", "public", "private_or_internal", "none"}
+	if override != "" {
+		for _, o := range options {
+			if o == override {
+				return override, nil
+			}
+		}
+		return "", fmt.Errorf("invalid value %q for scope (must be one of: %s)", override, strings.Join(options, ", "))
+	}
+	scope, err := pterm.DefaultInteractiveSelect.WithOptions(options).WithDefaultOption("all").Show("Select repositories to attach configuration to")
 	if err != nil {
 		return "", err
 	}
@@ -109,8 +160,12 @@ func GetAttachmentScope() (string, error) {
 	return scope, nil
 }
 
-// GetDefaultSetting prompts whether to set configuration as default
-func GetDefaultSetting() (bool, error) {
+// GetDefaultSetting prompts whether to set configuration as default. If override is non-nil,
+// its value is used directly.
+func GetDefaultSetting(override *bool) (bool, error) {
+	if override != nil {
+		return *override, nil
+	}
 	setDefault, err := pterm.DefaultInteractiveConfirm.WithDefaultText("Set this configuration as default for new repositories?").Show()
 	if err != nil {
 		return false, err
@@ -147,8 +202,13 @@ func GetConfigNameForModification() (string, error) {
 	return strings.TrimSpace(configName), nil
 }
 
-// GetUpdatedName prompts for updated configuration name
-func GetUpdatedName(currentName string) (string, error) {
+// GetUpdatedName prompts for updated configuration name. If override is non-empty, it is used.
+// To explicitly mean "keep current", pass currentName as the override (the caller handles that).
+func GetUpdatedName(currentName, override string) (string, error) {
+	if strings.TrimSpace(override) != "" {
+		newName := strings.TrimSpace(override)
+		return newName, nil
+	}
 	newName, err := pterm.DefaultInteractiveTextInput.WithDefaultText(currentName).WithMultiLine(false).Show("Enter updated security configuration name")
 	if err != nil {
 		return "", err
@@ -162,8 +222,13 @@ func GetUpdatedName(currentName string) (string, error) {
 	return newName, nil
 }
 
-// GetUpdatedDescription prompts for updated description
-func GetUpdatedDescription(currentDescription string) (string, error) {
+// GetUpdatedDescription prompts for updated description. If overrideProvided is true, the
+// override value is used directly (allowing an explicit empty description via the flag when
+// represented by the caller; currently an empty override falls through to the prompt).
+func GetUpdatedDescription(currentDescription, override string) (string, error) {
+	if strings.TrimSpace(override) != "" {
+		return strings.TrimSpace(override), nil
+	}
 	newDescription, err := pterm.DefaultInteractiveTextInput.WithDefaultText(currentDescription).WithMultiLine(false).Show("Enter updated security configuration description")
 	if err != nil {
 		return "", err
@@ -172,27 +237,46 @@ func GetUpdatedDescription(currentDescription string) (string, error) {
 	return strings.TrimSpace(newDescription), nil
 }
 
-// GetSecuritySettingsForUpdate prompts for updated security settings
-func GetSecuritySettingsForUpdate(currentSettings map[string]interface{}, dependabotAlertsAvailable bool, dependabotSecurityUpdatesAvailable bool) (map[string]interface{}, error) {
+// GetSecuritySettingsForUpdate prompts for updated security settings. Any non-empty override
+// on overrides is used directly instead of prompting. Unspecified settings default to keeping
+// the current value.
+func GetSecuritySettingsForUpdate(currentSettings map[string]interface{}, overrides SecuritySettingOverrides, dependabotAlertsAvailable bool, dependabotSecurityUpdatesAvailable bool) (map[string]interface{}, error) {
 	newSettings := make(map[string]interface{})
-
-	pterm.Info.Println("Update security settings (press Enter to keep current value):")
 
 	settingsConfig := []struct {
 		key                          string
 		description                  string
 		options                      []string
 		defaultValue                 string
+		override                     string
 		requiresDependabotAlerts     bool
 		requiresDependabotSecUpdates bool
 	}{
-		{"advanced_security", "GitHub Advanced Security", []string{"enabled", "disabled"}, "enabled", false, false},
-		{"dependabot_alerts", "Dependabot Alerts", []string{"enabled", "disabled", "not_set"}, "not_set", true, false},
-		{"dependabot_security_updates", "Dependabot Security Updates", []string{"enabled", "disabled", "not_set"}, "not_set", false, true},
-		{"secret_scanning", "Secret Scanning", []string{"enabled", "disabled", "not_set"}, "enabled", false, false},
-		{"secret_scanning_push_protection", "Secret Scanning Push Protection", []string{"enabled", "disabled", "not_set"}, "enabled", false, false},
-		{"secret_scanning_non_provider_patterns", "Secret Scanning Non-Provider Patterns", []string{"enabled", "disabled", "not_set"}, "not_set", false, false},
-		{"enforcement", "Enforcement Status", []string{"enforced", "unenforced"}, "enforced", false, false},
+		{"advanced_security", "GitHub Advanced Security", []string{"enabled", "disabled"}, "enabled", overrides.AdvancedSecurity, false, false},
+		{"dependabot_alerts", "Dependabot Alerts", []string{"enabled", "disabled", "not_set"}, "not_set", overrides.DependabotAlerts, true, false},
+		{"dependabot_security_updates", "Dependabot Security Updates", []string{"enabled", "disabled", "not_set"}, "not_set", overrides.DependabotSecurityUpdates, false, true},
+		{"secret_scanning", "Secret Scanning", []string{"enabled", "disabled", "not_set"}, "enabled", overrides.SecretScanning, false, false},
+		{"secret_scanning_push_protection", "Secret Scanning Push Protection", []string{"enabled", "disabled", "not_set"}, "enabled", overrides.SecretScanningPushProtection, false, false},
+		{"secret_scanning_non_provider_patterns", "Secret Scanning Non-Provider Patterns", []string{"enabled", "disabled", "not_set"}, "not_set", overrides.SecretScanningNonProviderPatterns, false, false},
+		{"enforcement", "Enforcement Status", []string{"enforced", "unenforced"}, "enforced", overrides.Enforcement, false, false},
+	}
+
+	// Determine if we will prompt for anything (to decide whether to show the header)
+	willPrompt := false
+	for _, c := range settingsConfig {
+		if c.requiresDependabotAlerts && !dependabotAlertsAvailable {
+			continue
+		}
+		if c.requiresDependabotSecUpdates && !dependabotSecurityUpdatesAvailable {
+			continue
+		}
+		if c.override == "" {
+			willPrompt = true
+			break
+		}
+	}
+	if willPrompt {
+		pterm.Info.Println("Update security settings (press Enter to keep current value):")
 	}
 
 	for _, config := range settingsConfig {
@@ -207,6 +291,22 @@ func GetSecuritySettingsForUpdate(currentSettings map[string]interface{}, depend
 		currentValue := "not_set"
 		if val, exists := currentSettings[config.key]; exists {
 			currentValue = fmt.Sprintf("%v", val)
+		}
+
+		// If an override is provided via flag, validate and use it
+		if config.override != "" {
+			valid := false
+			for _, o := range config.options {
+				if o == config.override {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				return nil, fmt.Errorf("invalid value %q for %s (must be one of: %s)", config.override, config.description, strings.Join(config.options, ", "))
+			}
+			newSettings[config.key] = config.override
+			continue
 		}
 
 		// Add option to keep current value
@@ -242,22 +342,88 @@ func GetConfigNameForApplication() (string, error) {
 	return strings.TrimSpace(configName), nil
 }
 
-// SelectConfigurationFromList prompts user to select a configuration from a list
+// SelectConfigurationFromList prompts user to select a configuration from a list.
+// If override is non-empty, the matching config is returned directly. If configSource is
+// also provided (either "organization" or "enterprise"), it disambiguates when the same name
+// exists in both lists.
 // Returns the configuration name and target type (organization or enterprise)
-func SelectConfigurationFromList(orgConfigs, enterpriseConfigs []string) (string, string, error) {
+func SelectConfigurationFromList(orgConfigs, enterpriseConfigs []string, override, configSource string) (string, string, error) {
+	if override != "" {
+		return resolveConfigOverride(orgConfigs, enterpriseConfigs, override, configSource)
+	}
 	return selectConfiguration(orgConfigs, enterpriseConfigs, "Select a security configuration to apply")
 }
 
-// SelectConfigurationForDeletion prompts user to select a configuration to delete
+// SelectConfigurationForDeletion prompts user to select a configuration to delete.
+// If override is non-empty and matches one of the configs, it is returned directly.
 // Returns the configuration name
-func SelectConfigurationForDeletion(orgConfigs []string) (string, error) {
+func SelectConfigurationForDeletion(orgConfigs []string, override string) (string, error) {
+	if override != "" {
+		return resolveNameOverride(orgConfigs, override, "delete")
+	}
 	return selectFromList(orgConfigs, "Select a security configuration to delete")
 }
 
-// SelectConfigurationForModification prompts user to select a configuration to modify
+// SelectConfigurationForModification prompts user to select a configuration to modify.
+// If override is non-empty and matches one of the configs, it is returned directly.
 // Returns the configuration name
-func SelectConfigurationForModification(orgConfigs []string) (string, error) {
+func SelectConfigurationForModification(orgConfigs []string, override string) (string, error) {
+	if override != "" {
+		return resolveNameOverride(orgConfigs, override, "modify")
+	}
 	return selectFromList(orgConfigs, "Select a security configuration to modify")
+}
+
+// resolveNameOverride validates that the supplied override matches one of the available configs.
+func resolveNameOverride(configs []string, override, verb string) (string, error) {
+	for _, c := range configs {
+		if c == override {
+			return override, nil
+		}
+	}
+	return "", fmt.Errorf("configuration %q not found in the list of configurations available to %s", override, verb)
+}
+
+// resolveConfigOverride disambiguates between org and enterprise configs given an override name
+// and optional configSource ("organization" or "enterprise").
+func resolveConfigOverride(orgConfigs, enterpriseConfigs []string, override, configSource string) (string, string, error) {
+	inOrg := contains(orgConfigs, override)
+	inEnterprise := contains(enterpriseConfigs, override)
+
+	switch configSource {
+	case "organization":
+		if !inOrg {
+			return "", "", fmt.Errorf("organization configuration %q not found in template organization", override)
+		}
+		return override, "organization", nil
+	case "enterprise":
+		if !inEnterprise {
+			return "", "", fmt.Errorf("enterprise configuration %q not found", override)
+		}
+		return override, "enterprise", nil
+	case "":
+		if inOrg && inEnterprise {
+			return "", "", fmt.Errorf("configuration name %q exists at both organization and enterprise level; specify --config-source (organization|enterprise) to disambiguate", override)
+		}
+		if inOrg {
+			return override, "organization", nil
+		}
+		if inEnterprise {
+			return override, "enterprise", nil
+		}
+		return "", "", fmt.Errorf("configuration %q not found at organization or enterprise level", override)
+	default:
+		return "", "", fmt.Errorf("invalid value %q for --config-source (must be 'organization' or 'enterprise')", configSource)
+	}
+}
+
+func contains(list []string, target string) bool {
+	for _, s := range list {
+		if s == target {
+			return true
+		}
+	}
+	return false
 }
 
 // selectFromList is a shared helper for single-list configuration selection prompts
@@ -315,13 +481,19 @@ func selectConfiguration(orgConfigs, enterpriseConfigs []string, prompt string) 
 	return config.name, config.targetType, nil
 }
 
-// GetAttachmentScopeForApplication prompts for repository attachment scope (without 'none' option)
-func GetAttachmentScopeForApplication() (string, error) {
-	scope, err := pterm.DefaultInteractiveSelect.WithOptions([]string{
-		"all",
-		"public",
-		"private_or_internal",
-	}).WithDefaultOption("all").Show("Select repositories to attach configuration to")
+// GetAttachmentScopeForApplication prompts for repository attachment scope (without 'none' option).
+// If override is non-empty, it is validated and used directly.
+func GetAttachmentScopeForApplication(override string) (string, error) {
+	options := []string{"all", "public", "private_or_internal"}
+	if override != "" {
+		for _, o := range options {
+			if o == override {
+				return override, nil
+			}
+		}
+		return "", fmt.Errorf("invalid value %q for scope (must be one of: %s)", override, strings.Join(options, ", "))
+	}
+	scope, err := pterm.DefaultInteractiveSelect.WithOptions(options).WithDefaultOption("all").Show("Select repositories to attach configuration to")
 	if err != nil {
 		return "", err
 	}

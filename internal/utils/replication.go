@@ -22,10 +22,25 @@ func BuildReplicationCommand(command string, flags map[string]interface{}) strin
 		"all-orgs",
 		"copy-from-org",
 		"force",
+		"config-name",
+		"config-description",
+		"new-name",
+		"new-description",
+		"config-source",
+		"advanced-security",
+		"dependabot-alerts",
+		"dependabot-security-updates",
+		"secret-scanning",
+		"secret-scanning-push-protection",
+		"secret-scanning-non-provider-patterns",
+		"enforcement",
+		"scope",
+		"set-as-default",
 		"dependabot-alerts-available",
 		"dependabot-security-updates-available",
 		"concurrency",
 		"delay",
+		"yes",
 	}
 
 	for _, flagName := range flagOrder {
@@ -71,16 +86,18 @@ func BuildReplicationCommand(command string, flags map[string]interface{}) strin
 // getShortFlag returns the short version of a flag if it exists
 func getShortFlag(flagName string) string {
 	shortFlags := map[string]string{
-		"org-list":                                "l",
-		"concurrency":                             "c",
-		"delay":                                   "d",
-		"enterprise-slug":                         "e",
-		"github-enterprise-server-url":            "u",
-		"dependabot-alerts-available":             "a",
-		"dependabot-security-updates-available":   "s",
-		"copy-from-org":                           "o",
-		"force":                                   "f",
-		"template-org":                            "t",
+		"org-list":                              "l",
+		"concurrency":                           "c",
+		"delay":                                 "d",
+		"enterprise-slug":                       "e",
+		"github-enterprise-server-url":          "u",
+		"dependabot-alerts-available":           "a",
+		"dependabot-security-updates-available": "s",
+		"copy-from-org":                         "o",
+		"force":                                 "f",
+		"template-org":                          "t",
+		"config-name":                           "n",
+		"yes":                                   "y",
 	}
 	return shortFlags[flagName]
 }
