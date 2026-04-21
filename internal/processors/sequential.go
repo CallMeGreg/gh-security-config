@@ -41,19 +41,14 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 	progressBar, _ := pterm.DefaultProgressbar.WithTotal(totalOrgs).WithTitle("Processing organizations").Start()
 	sp.progressBar = progressBar
 
-	// Show delay information if configured
-	if sp.delay > 0 {
-		pterm.Info.Printf("Processing organizations with %d second delay between each organization\n", sp.delay)
-	}
-
 	// Process each organization sequentially
 	for i, org := range sp.organizations {
 		// Add delay between organizations (not before the first one)
 		if i > 0 && sp.delay > 0 {
-			// Show loading symbol during delay
-			spinner, _ := pterm.DefaultSpinner.WithText(fmt.Sprintf("Waiting %d seconds before processing next organization...", sp.delay)).Start()
-			time.Sleep(time.Duration(sp.delay) * time.Second)
-			spinner.Success("Ready to process next organization")
+			for remaining := sp.delay; remaining > 0; remaining-- {
+				sp.progressBar.UpdateTitle(fmt.Sprintf("Waiting %d seconds before processing next organization...", remaining))
+				time.Sleep(time.Second)
+			}
 		}
 
 		sp.progressBar.UpdateTitle(fmt.Sprintf("Processing %s", org))
@@ -64,16 +59,12 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 		if result.Success {
 			sp.successCount++
 			sp.progressBar.UpdateTitle(fmt.Sprintf("Processed %s", result.Organization))
-			sp.progressBar.Increment()
 		} else if result.Skipped {
 			sp.skippedCount++
 			sp.progressBar.UpdateTitle(fmt.Sprintf("Skipped %s", result.Organization))
-			sp.progressBar.Increment()
-			// Skipped message should already be printed by the processor
 		} else if result.Error != nil {
 			sp.errorCount++
 			sp.progressBar.UpdateTitle(fmt.Sprintf("Processed %s", result.Organization))
-			sp.progressBar.Increment()
 			// Check if this is a "configuration exists" error
 			var configExistsErr *types.ConfigurationExistsError
 			if errors.As(result.Error, &configExistsErr) {
@@ -100,6 +91,10 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 				}
 			}
 		}
+
+		// Always increment after all output is printed, so the progress bar
+		// re-renders correctly after any warning/error messages
+		sp.progressBar.Increment()
 	}
 
 	progressBar.Stop()

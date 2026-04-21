@@ -35,3 +35,6 @@ Thumbs.db
 
 # Release script
 release.sh
+
+# CSV files
+*.csv

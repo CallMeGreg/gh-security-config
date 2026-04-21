@@ -245,6 +245,17 @@ func GetConfigNameForApplication() (string, error) {
 // SelectConfigurationFromList prompts user to select a configuration from a list
 // Returns the configuration name and target type (organization or enterprise)
 func SelectConfigurationFromList(orgConfigs, enterpriseConfigs []string) (string, string, error) {
+	return selectConfiguration(orgConfigs, enterpriseConfigs, "Select a security configuration to apply")
+}
+
+// SelectConfigurationForDeletion prompts user to select a configuration to delete
+// Returns the configuration name and target type (organization or enterprise)
+func SelectConfigurationForDeletion(orgConfigs, enterpriseConfigs []string) (string, string, error) {
+	return selectConfiguration(orgConfigs, enterpriseConfigs, "Select a security configuration to delete")
+}
+
+// selectConfiguration is a shared helper for configuration selection prompts
+func selectConfiguration(orgConfigs, enterpriseConfigs []string, prompt string) (string, string, error) {
 	if len(orgConfigs) == 0 && len(enterpriseConfigs) == 0 {
 		return "", "", fmt.Errorf("no configurations available")
 	}
@@ -275,7 +286,7 @@ func SelectConfigurationFromList(orgConfigs, enterpriseConfigs []string) (string
 		}{name, "enterprise"}
 	}
 
-	selection, err := pterm.DefaultInteractiveSelect.WithOptions(options).Show("Select a security configuration to apply")
+	selection, err := pterm.DefaultInteractiveSelect.WithOptions(options).Show(prompt)
 	if err != nil {
 		return "", "", err
 	}

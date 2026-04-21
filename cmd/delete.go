@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 
@@ -82,7 +84,6 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	// Get GHES version from /meta endpoint to determine if enterprise configurations are available
 	pterm.Info.Println("Detecting GitHub Enterprise Server version...")
 	ghesVersion, err := api.GetGHESVersion()
-	var enterpriseConfigCount int
 	if err != nil {
 		pterm.Warning.Printf("Could not detect GHES version: %v\n", err)
 		pterm.Info.Println("Assuming enterprise configurations are not available")
@@ -91,6 +92,10 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		pterm.Success.Printf("Detected GHES version: %s\n", ghesVersion)
 	}
 
+	// Collect available configurations from both enterprise and template organization
+	var orgConfigNames []string
+	var enterpriseConfigNames []string
+
 	// Fetch enterprise configurations if GHES 3.16+
 	if api.SupportsEnterpriseConfigurations(ghesVersion) {
 		pterm.Info.Println("Fetching enterprise security configurations...")
@@ -98,16 +103,18 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			pterm.Warning.Printf("Could not fetch enterprise configurations: %v\n", err)
 		} else {
-			enterpriseConfigCount = len(enterpriseConfigs)
-			if enterpriseConfigCount > 0 {
-				pterm.Success.Printf("Found %d enterprise security configuration(s)\n", enterpriseConfigCount)
+			for _, config := range enterpriseConfigs {
+				enterpriseConfigNames = append(enterpriseConfigNames, config.Name)
+			}
+			if len(enterpriseConfigs) > 0 {
+				pterm.Success.Printf("Found %d enterprise security configuration(s)\n", len(enterpriseConfigs))
 			}
 		}
 	}
 
 	// If no org targeting method is provided, prompt user to select one
 	if !utils.HasOrgTargeting(commonFlags) {
-		if enterpriseConfigCount > 0 {
+		if len(enterpriseConfigNames) > 0 {
 			pterm.Info.Println("Organization-level security configurations deleted by this command will not affect existing enterprise configurations.")
 		}
 
@@ -146,6 +153,43 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	pterm.Info.Printf("Using template organization: %s\n", templateOrg)
 
+	// Fetch org-level configuration names from template organization only
+	pterm.Info.Printf("Fetching security configurations from template organization '%s'...\n", templateOrg)
+	status, err := api.CheckSingleOrganizationMembership(templateOrg)
+	if err != nil || !status.IsMember || !status.IsOwner {
+		if err != nil {
+			pterm.Warning.Printf("Could not access template organization '%s': %v\n", templateOrg, err)
+		} else {
+			pterm.Warning.Printf("You must be an owner of template organization '%s' to fetch configurations\n", templateOrg)
+		}
+	} else {
+		configs, err := api.FetchSecurityConfigurations(templateOrg)
+		if err != nil {
+			pterm.Warning.Printf("Could not fetch configurations from template organization '%s': %v\n", templateOrg, err)
+		} else {
+			for _, config := range configs {
+				// Only add organization-level configs (not enterprise configs shown at org level)
+				if config.TargetType != "enterprise" {
+					orgConfigNames = append(orgConfigNames, config.Name)
+				}
+			}
+			if len(orgConfigNames) > 0 {
+				pterm.Success.Printf("Found %d organization security configuration(s) in template org\n", len(orgConfigNames))
+			}
+		}
+	}
+
+	// Let user select a configuration to delete
+	var configName string
+	if len(enterpriseConfigNames) > 0 || len(orgConfigNames) > 0 {
+		configName, _, err = ui.SelectConfigurationForDeletion(orgConfigNames, enterpriseConfigNames)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("no security configurations found at enterprise or organization level")
+	}
+
 	// Fetch organizations
 	orgs, err := api.GetOrganizations(enterprise, commonFlags.Org, commonFlags.OrgListPath, commonFlags.AllOrgs)
 	if err != nil {
@@ -155,12 +199,6 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	if len(orgs) == 0 {
 		ui.ShowNoOrganizationsWarning(commonFlags)
 		return nil
-	}
-
-	// Get security configuration name to delete
-	configName, err := ui.GetConfigNameForDeletion()
-	if err != nil {
-		return err
 	}
 
 	// Confirm before proceeding
