@@ -124,12 +124,12 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	// Fetch org-level configuration names from template organization only
 	pterm.Info.Printf("Fetching security configurations from template organization '%s'...\n", templateOrg)
 	status, err := api.CheckSingleOrganizationMembership(templateOrg)
-	if err != nil || !status.IsMember || !status.IsOwner {
-		if err != nil {
-			pterm.Warning.Printf("Could not access template organization '%s': %v\n", templateOrg, err)
-		} else {
-			pterm.Warning.Printf("You must be an owner of template organization '%s' to fetch configurations\n", templateOrg)
-		}
+	if err != nil {
+		pterm.Warning.Printf("Could not access template organization '%s': %v\n", templateOrg, err)
+	} else if !status.IsMember {
+		pterm.Warning.Printf("You must be a member of template organization '%s' to fetch configurations\n", templateOrg)
+	} else if !status.IsOwner {
+		pterm.Warning.Printf("You must be an owner of template organization '%s' to fetch configurations\n", templateOrg)
 	} else {
 		configs, err := api.FetchSecurityConfigurations(templateOrg)
 		if err != nil {
