@@ -51,6 +51,8 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 			}
 		}
 
+		// Increment before processing so the bar shows 1-based progress (e.g. "1/5")
+		sp.progressBar.Increment()
 		sp.progressBar.UpdateTitle(fmt.Sprintf("Processing %s", org))
 
 		// Process the organization
@@ -79,8 +81,7 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 					pterm.Error.Println("Stopping processing of remaining organizations due to Dependabot unavailability.")
 					pterm.Error.Println("Please remove Dependabot settings from your configuration or enable Dependabot on your GHES instance.")
 
-					// Increment for the current org, then add remaining as skipped
-					sp.progressBar.Increment()
+					// Add remaining orgs as skipped
 					remainingOrgs := totalOrgs - (i + 1)
 					sp.skippedCount += remainingOrgs
 					sp.progressBar.Add(remainingOrgs)
@@ -93,9 +94,6 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 			}
 		}
 
-		// Always increment after all output is printed, so the progress bar
-		// re-renders correctly after any warning/error messages
-		sp.progressBar.Increment()
 	}
 
 	progressBar.Stop()
