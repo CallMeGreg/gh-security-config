@@ -79,7 +79,8 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 					pterm.Error.Println("Stopping processing of remaining organizations due to Dependabot unavailability.")
 					pterm.Error.Println("Please remove Dependabot settings from your configuration or enable Dependabot on your GHES instance.")
 
-					// Update progress bar to reflect remaining organizations as skipped
+					// Increment for the current org, then add remaining as skipped
+					sp.progressBar.Increment()
 					remainingOrgs := totalOrgs - (i + 1)
 					sp.skippedCount += remainingOrgs
 					sp.progressBar.Add(remainingOrgs)
