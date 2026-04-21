@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 
@@ -79,38 +81,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	// Set hostname if using GitHub Enterprise Server
 	ui.SetupGitHubHost(serverURL)
 
-	// Get GHES version from /meta endpoint to determine if enterprise configurations are available
-	pterm.Info.Println("Detecting GitHub Enterprise Server version...")
-	ghesVersion, err := api.GetGHESVersion()
-	var enterpriseConfigCount int
-	if err != nil {
-		pterm.Warning.Printf("Could not detect GHES version: %v\n", err)
-		pterm.Info.Println("Assuming enterprise configurations are not available")
-		ghesVersion = ""
-	} else if ghesVersion != "" {
-		pterm.Success.Printf("Detected GHES version: %s\n", ghesVersion)
-	}
-
-	// Fetch enterprise configurations if GHES 3.16+
-	if api.SupportsEnterpriseConfigurations(ghesVersion) {
-		pterm.Info.Println("Fetching enterprise security configurations...")
-		enterpriseConfigs, err := api.FetchEnterpriseSecurityConfigurations(enterprise)
-		if err != nil {
-			pterm.Warning.Printf("Could not fetch enterprise configurations: %v\n", err)
-		} else {
-			enterpriseConfigCount = len(enterpriseConfigs)
-			if enterpriseConfigCount > 0 {
-				pterm.Success.Printf("Found %d enterprise security configuration(s)\n", enterpriseConfigCount)
-			}
-		}
-	}
+	// Collect available configurations from template organization
+	var orgConfigNames []string
 
 	// If no org targeting method is provided, prompt user to select one
 	if !utils.HasOrgTargeting(commonFlags) {
-		if enterpriseConfigCount > 0 {
-			pterm.Info.Println("Organization-level security configurations deleted by this command will not affect existing enterprise configurations.")
-		}
-
 		targetingMethod, err := ui.SelectOrgTargetingMethod()
 		if err != nil {
 			return err
@@ -146,6 +121,43 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	pterm.Info.Printf("Using template organization: %s\n", templateOrg)
 
+	// Fetch org-level configuration names from template organization only
+	pterm.Info.Printf("Fetching security configurations from template organization '%s'...\n", templateOrg)
+	status, err := api.CheckSingleOrganizationMembership(templateOrg)
+	if err != nil {
+		pterm.Warning.Printf("Could not access template organization '%s': %v\n", templateOrg, err)
+	} else if !status.IsMember {
+		pterm.Warning.Printf("You must be a member of template organization '%s' to fetch configurations\n", templateOrg)
+	} else if !status.IsOwner {
+		pterm.Warning.Printf("You must be an owner of template organization '%s' to fetch configurations\n", templateOrg)
+	} else {
+		configs, err := api.FetchSecurityConfigurations(templateOrg)
+		if err != nil {
+			pterm.Warning.Printf("Could not fetch configurations from template organization '%s': %v\n", templateOrg, err)
+		} else {
+			for _, config := range configs {
+				// Only add organization-level configs (not enterprise configs shown at org level)
+				if config.TargetType != "enterprise" {
+					orgConfigNames = append(orgConfigNames, config.Name)
+				}
+			}
+			if len(orgConfigNames) > 0 {
+				pterm.Success.Printf("Found %d organization security configuration(s) in template org\n", len(orgConfigNames))
+			}
+		}
+	}
+
+	// Let user select a configuration to delete
+	var configName string
+	if len(orgConfigNames) > 0 {
+		configName, err = ui.SelectConfigurationForDeletion(orgConfigNames)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("no security configurations found in template organization '%s'", templateOrg)
+	}
+
 	// Fetch organizations
 	orgs, err := api.GetOrganizations(enterprise, commonFlags.Org, commonFlags.OrgListPath, commonFlags.AllOrgs)
 	if err != nil {
@@ -155,12 +167,6 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	if len(orgs) == 0 {
 		ui.ShowNoOrganizationsWarning(commonFlags)
 		return nil
-	}
-
-	// Get security configuration name to delete
-	configName, err := ui.GetConfigNameForDeletion()
-	if err != nil {
-		return err
 	}
 
 	// Confirm before proceeding
