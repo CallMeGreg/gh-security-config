@@ -251,11 +251,22 @@ func SelectConfigurationFromList(orgConfigs, enterpriseConfigs []string) (string
 // SelectConfigurationForDeletion prompts user to select a configuration to delete
 // Returns the configuration name
 func SelectConfigurationForDeletion(orgConfigs []string) (string, error) {
-	if len(orgConfigs) == 0 {
+	return selectFromList(orgConfigs, "Select a security configuration to delete")
+}
+
+// SelectConfigurationForModification prompts user to select a configuration to modify
+// Returns the configuration name
+func SelectConfigurationForModification(orgConfigs []string) (string, error) {
+	return selectFromList(orgConfigs, "Select a security configuration to modify")
+}
+
+// selectFromList is a shared helper for single-list configuration selection prompts
+func selectFromList(configs []string, prompt string) (string, error) {
+	if len(configs) == 0 {
 		return "", fmt.Errorf("no configurations available")
 	}
 
-	selection, err := pterm.DefaultInteractiveSelect.WithOptions(orgConfigs).Show("Select a security configuration to delete")
+	selection, err := pterm.DefaultInteractiveSelect.WithOptions(configs).Show(prompt)
 	if err != nil {
 		return "", err
 	}

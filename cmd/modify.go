@@ -148,6 +148,44 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 	pterm.Info.Printf("Using template organization: %s\n", templateOrg)
 
+	// Fetch org-level configuration names from template organization only
+	pterm.Info.Printf("Fetching security configurations from template organization '%s'...\n", templateOrg)
+	var orgConfigNames []string
+	status, err := api.CheckSingleOrganizationMembership(templateOrg)
+	if err != nil {
+		pterm.Warning.Printf("Could not access template organization '%s': %v\n", templateOrg, err)
+	} else if !status.IsMember {
+		pterm.Warning.Printf("You must be a member of template organization '%s' to fetch configurations\n", templateOrg)
+	} else if !status.IsOwner {
+		pterm.Warning.Printf("You must be an owner of template organization '%s' to fetch configurations\n", templateOrg)
+	} else {
+		configs, err := api.FetchSecurityConfigurations(templateOrg)
+		if err != nil {
+			pterm.Warning.Printf("Could not fetch configurations from template organization '%s': %v\n", templateOrg, err)
+		} else {
+			for _, config := range configs {
+				// Only add organization-level configs (not enterprise configs shown at org level)
+				if config.TargetType != "enterprise" {
+					orgConfigNames = append(orgConfigNames, config.Name)
+				}
+			}
+			if len(orgConfigNames) > 0 {
+				pterm.Success.Printf("Found %d organization security configuration(s) in template org\n", len(orgConfigNames))
+			}
+		}
+	}
+
+	// Let user select a configuration to modify
+	var configName string
+	if len(orgConfigNames) > 0 {
+		configName, err = ui.SelectConfigurationForModification(orgConfigNames)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("no security configurations found in template organization '%s'", templateOrg)
+	}
+
 	// Check Dependabot availability
 	dependabotAlertsAvailable, err := ui.GetDependabotAlertsAvailability(commonFlags.DependabotAlertsAvailable)
 	if err != nil {
@@ -170,24 +208,9 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Get security configuration name to modify
-	configName, err := ui.GetConfigNameForModification()
-	if err != nil {
-		return err
-	}
-
 	// Fetch existing configuration details from template organization to show current settings
 	var currentSettings map[string]interface{}
 	var currentDescription string
-
-	// Check membership for template organization
-	status, err := api.CheckSingleOrganizationMembership(templateOrg)
-	if err != nil || !status.IsMember || !status.IsOwner {
-		if err != nil {
-			return fmt.Errorf("could not access template organization '%s': %w", templateOrg, err)
-		}
-		return fmt.Errorf("you must be an owner of template organization '%s' to fetch configurations", templateOrg)
-	}
 
 	configs, err := api.FetchSecurityConfigurations(templateOrg)
 	if err != nil {
