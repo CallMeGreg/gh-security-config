@@ -249,9 +249,18 @@ func SelectConfigurationFromList(orgConfigs, enterpriseConfigs []string) (string
 }
 
 // SelectConfigurationForDeletion prompts user to select a configuration to delete
-// Returns the configuration name and target type (organization or enterprise)
-func SelectConfigurationForDeletion(orgConfigs, enterpriseConfigs []string) (string, string, error) {
-	return selectConfiguration(orgConfigs, enterpriseConfigs, "Select a security configuration to delete")
+// Returns the configuration name
+func SelectConfigurationForDeletion(orgConfigs []string) (string, error) {
+	if len(orgConfigs) == 0 {
+		return "", fmt.Errorf("no configurations available")
+	}
+
+	selection, err := pterm.DefaultInteractiveSelect.WithOptions(orgConfigs).Show("Select a security configuration to delete")
+	if err != nil {
+		return "", err
+	}
+
+	return selection, nil
 }
 
 // selectConfiguration is a shared helper for configuration selection prompts

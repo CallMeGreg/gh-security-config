@@ -81,43 +81,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	// Set hostname if using GitHub Enterprise Server
 	ui.SetupGitHubHost(serverURL)
 
-	// Get GHES version from /meta endpoint to determine if enterprise configurations are available
-	pterm.Info.Println("Detecting GitHub Enterprise Server version...")
-	ghesVersion, err := api.GetGHESVersion()
-	if err != nil {
-		pterm.Warning.Printf("Could not detect GHES version: %v\n", err)
-		pterm.Info.Println("Assuming enterprise configurations are not available")
-		ghesVersion = ""
-	} else if ghesVersion != "" {
-		pterm.Success.Printf("Detected GHES version: %s\n", ghesVersion)
-	}
-
-	// Collect available configurations from both enterprise and template organization
+	// Collect available configurations from template organization
 	var orgConfigNames []string
-	var enterpriseConfigNames []string
-
-	// Fetch enterprise configurations if GHES 3.16+
-	if api.SupportsEnterpriseConfigurations(ghesVersion) {
-		pterm.Info.Println("Fetching enterprise security configurations...")
-		enterpriseConfigs, err := api.FetchEnterpriseSecurityConfigurations(enterprise)
-		if err != nil {
-			pterm.Warning.Printf("Could not fetch enterprise configurations: %v\n", err)
-		} else {
-			for _, config := range enterpriseConfigs {
-				enterpriseConfigNames = append(enterpriseConfigNames, config.Name)
-			}
-			if len(enterpriseConfigs) > 0 {
-				pterm.Success.Printf("Found %d enterprise security configuration(s)\n", len(enterpriseConfigs))
-			}
-		}
-	}
 
 	// If no org targeting method is provided, prompt user to select one
 	if !utils.HasOrgTargeting(commonFlags) {
-		if len(enterpriseConfigNames) > 0 {
-			pterm.Info.Println("Organization-level security configurations deleted by this command will not affect existing enterprise configurations.")
-		}
-
 		targetingMethod, err := ui.SelectOrgTargetingMethod()
 		if err != nil {
 			return err
@@ -181,13 +149,13 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	// Let user select a configuration to delete
 	var configName string
-	if len(enterpriseConfigNames) > 0 || len(orgConfigNames) > 0 {
-		configName, _, err = ui.SelectConfigurationForDeletion(orgConfigNames, enterpriseConfigNames)
+	if len(orgConfigNames) > 0 {
+		configName, err = ui.SelectConfigurationForDeletion(orgConfigNames)
 		if err != nil {
 			return err
 		}
 	} else {
-		return fmt.Errorf("no security configurations found at enterprise or organization level")
+		return fmt.Errorf("no security configurations found in template organization '%s'", templateOrg)
 	}
 
 	// Fetch organizations
