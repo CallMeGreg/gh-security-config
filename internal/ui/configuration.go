@@ -222,9 +222,9 @@ func GetUpdatedName(currentName, override string) (string, error) {
 	return newName, nil
 }
 
-// GetUpdatedDescription prompts for updated description. If overrideProvided is true, the
-// override value is used directly (allowing an explicit empty description via the flag when
-// represented by the caller; currently an empty override falls through to the prompt).
+// GetUpdatedDescription prompts for updated description. If override is non-empty, it is used
+// directly without prompting; otherwise the user is prompted and the current value is offered
+// as the default (pressing Enter keeps the current description).
 func GetUpdatedDescription(currentDescription, override string) (string, error) {
 	if strings.TrimSpace(override) != "" {
 		return strings.TrimSpace(override), nil
