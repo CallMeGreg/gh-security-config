@@ -27,7 +27,6 @@ func init() {
 	applyCmd.Flags().StringP("template-org", "t", "", "Template organization to fetch security configurations from (required)")
 
 	// Non-interactive input flags
-	applyCmd.Flags().StringP("config-name", "n", "", "Name of the security configuration to apply (replaces interactive selection)")
 	applyCmd.Flags().String("config-source", "", "Source of the configuration to apply when --config-name is ambiguous (organization, enterprise)")
 	applyCmd.Flags().String("scope", "", "Repository attachment scope (all, public, private_or_internal)")
 	applyCmd.Flags().String("set-as-default", "", "Whether to set this configuration as default for new repositories (true/false)")
@@ -105,7 +104,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	yesFlag, err := cmd.Flags().GetBool("yes")
+	force, err := extractForceFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -301,7 +300,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 	}
 
 	// Confirm before proceeding
-	confirmed, err := ui.ConfirmApplyOperation(orgs, configName, configDetails.Description, configDetails.Settings, scope, setAsDefault, yesFlag)
+	confirmed, err := ui.ConfirmApplyOperation(orgs, configName, configDetails.Description, configDetails.Settings, scope, setAsDefault, force)
 	if err != nil {
 		return err
 	}
@@ -346,7 +345,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 		"config-source":                targetType,
 		"scope":                        scope,
 		"set-as-default":               fmt.Sprintf("%t", setAsDefault),
-		"yes":                          yesFlag,
+		"force":                        fmt.Sprintf("%t", force),
 	}
 
 	// Add org targeting flags

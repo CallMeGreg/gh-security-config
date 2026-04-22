@@ -97,14 +97,14 @@ func TestBuildReplicationCommand(t *testing.T) {
 			flags: map[string]interface{}{
 				"enterprise-slug": "my-enterprise",
 				"all-orgs":        true,
-				"force":           true,
+				"force":           "true",
 				"copy-from-org":   "source-org",
 			},
 			expected: []string{
 				"gh security-config generate",
 				"-e my-enterprise",
 				"--all-orgs",
-				"-f",
+				"-f true",
 				"-o source-org",
 			},
 		},
@@ -172,7 +172,7 @@ func TestBuildReplicationCommand(t *testing.T) {
 				"enforcement":                           "enforced",
 				"scope":                                 "all",
 				"set-as-default":                        "true",
-				"yes":                                   true,
+				"force":                                 "true",
 			},
 			expected: []string{
 				"gh security-config generate",
@@ -189,7 +189,7 @@ func TestBuildReplicationCommand(t *testing.T) {
 				"--enforcement enforced",
 				"--scope all",
 				"--set-as-default true",
-				"-y",
+				"-f true",
 			},
 		},
 		{
@@ -203,7 +203,7 @@ func TestBuildReplicationCommand(t *testing.T) {
 				"config-source":   "organization",
 				"scope":           "public",
 				"set-as-default":  "false",
-				"yes":             true,
+				"force":           "true",
 			},
 			expected: []string{
 				"gh security-config apply",
@@ -214,23 +214,23 @@ func TestBuildReplicationCommand(t *testing.T) {
 				"--config-source organization",
 				"--scope public",
 				"--set-as-default false",
-				"-y",
+				"-f true",
 			},
 		},
 		{
-			name:    "Delete with config-name and yes",
+			name:    "Delete with config-name and force",
 			command: "delete",
 			flags: map[string]interface{}{
 				"enterprise-slug": "my-enterprise",
 				"template-org":    "template-org",
 				"all-orgs":        true,
 				"config-name":     "old-config",
-				"yes":             true,
+				"force":           "true",
 			},
 			expected: []string{
 				"gh security-config delete",
 				"-n old-config",
-				"-y",
+				"-f true",
 			},
 		},
 		{
@@ -342,7 +342,7 @@ func TestGetShortFlag(t *testing.T) {
 		{"force", "f"},
 		{"template-org", "t"},
 		{"config-name", "n"},
-		{"yes", "y"},
+		{"force", "f"},
 		{"unknown-flag", ""}, // Should return empty string for unknown flags
 	}
 

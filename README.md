@@ -60,17 +60,17 @@ These flags are available on all commands:
 - **`--github-enterprise-server-url string`** (`-u`) - GitHub Enterprise URL (e.g., github.company.com)
 - **`--dependabot-alerts-available string`** (`-a`) - Whether Dependabot Alerts are available in your GHES instance (true/false)
 - **`--dependabot-security-updates-available string`** (`-s`) - Whether Dependabot Security Updates are available in your GHES instance (true/false)
-- **`--yes`** (`-y`) - Skip confirmation prompts (useful for non-interactive / scripted usage)
+- **`--config-name string`** (`-n`) - Name of the security configuration to operate on. Replaces the interactive configuration-name prompt for each command (the meaning is command-specific: the name to create in `generate`, the name to select in `apply`/`delete`/`modify`, or the name of the source config in `generate --copy-from-org`).
+- **`--force string`** (`-f`) - Force the operation without confirmation prompts (`true`/`false`). In `generate`, also forces overwrite of existing configurations with the same name (previous behavior of the generate-specific `--force` flag).
 
 ### Non-Interactive Input Flags
 
-All commands can be run non-interactively in a single call by passing the corresponding flags for each interactive prompt. Any flag that is omitted falls back to its interactive prompt, so these flags can also be mixed and matched to only pre-fill a subset of inputs.
+All commands can be run non-interactively in a single call by passing the corresponding flags for each interactive prompt. Any flag that is omitted falls back to its interactive prompt, so these flags can also be mixed and matched to only pre-fill a subset of inputs. The universal flags `--config-name` / `-n` and `--force` / `-f` are documented above under "Persistent Flags".
 
 #### `generate` Command Flags
 
 | Flag | Interactive prompt it replaces |
 |------|--------------------------------|
-| `--config-name` (`-n`) | "Enter security configuration name" (when not using `--copy-from-org`) / "Select a configuration to copy" (when using `--copy-from-org`) |
 | `--config-description` | "Enter security configuration description" |
 | `--advanced-security` | "GitHub Advanced Security" (`enabled`, `disabled`) |
 | `--dependabot-alerts` | "Dependabot Alerts" (`enabled`, `disabled`, `not_set`) |
@@ -81,30 +81,23 @@ All commands can be run non-interactively in a single call by passing the corres
 | `--enforcement` | "Enforcement Status" (`enforced`, `unenforced`) |
 | `--scope` | "Select repositories to attach configuration to" (`all`, `public`, `private_or_internal`, `none`) |
 | `--set-as-default` | "Set this configuration as default for new repositories?" (`true`, `false`) |
-| `--yes` (`-y`) | Final "Proceed with creating security configurations?" confirmation |
 
 #### `apply` Command Flags
 
 | Flag | Interactive prompt it replaces |
 |------|--------------------------------|
-| `--config-name` (`-n`) | "Select a security configuration to apply" |
 | `--config-source` | Disambiguates `--config-name` when the same name exists at both levels (`organization`, `enterprise`) |
 | `--scope` | "Select repositories to attach configuration to" (`all`, `public`, `private_or_internal`) |
 | `--set-as-default` | "Set this configuration as default for new repositories?" (`true`, `false`) |
-| `--yes` (`-y`) | Final "Proceed with applying security configuration to repositories?" confirmation |
 
 #### `delete` Command Flags
 
-| Flag | Interactive prompt it replaces |
-|------|--------------------------------|
-| `--config-name` (`-n`) | "Select a security configuration to delete" |
-| `--yes` (`-y`) | Final "Are you absolutely sure you want to proceed with deleting this configuration?" confirmation |
+The `delete` command uses only the universal `--config-name` and `--force` flags (plus `--template-org`). No additional command-specific input flags.
 
 #### `modify` Command Flags
 
 | Flag | Interactive prompt it replaces |
 |------|--------------------------------|
-| `--config-name` (`-n`) | "Select a security configuration to modify" |
 | `--new-name` | "Enter updated security configuration name" (omit to keep the current name) |
 | `--new-description` | "Enter updated security configuration description" (omit to keep the current description) |
 | `--advanced-security` | Update prompt for GitHub Advanced Security (`enabled`, `disabled`) |
@@ -114,7 +107,6 @@ All commands can be run non-interactively in a single call by passing the corres
 | `--secret-scanning-push-protection` | Update prompt for Secret Scanning Push Protection (`enabled`, `disabled`, `not_set`) |
 | `--secret-scanning-non-provider-patterns` | Update prompt for Secret Scanning Non-Provider Patterns (`enabled`, `disabled`, `not_set`) |
 | `--enforcement` | Update prompt for Enforcement Status (`enforced`, `unenforced`) |
-| `--yes` (`-y`) | Final "Proceed with modifying security configurations?" confirmation |
 
 > [!NOTE]
 > The replication command printed at the end of each run now emits the full set of flags used (including any values chosen interactively), so the exact invocation can be re-run non-interactively.
@@ -124,7 +116,6 @@ All commands can be run non-interactively in a single call by passing the corres
 The `generate` command has additional flags:
 
 - **`--copy-from-org string`** (`-o`) - Organization name to copy an existing configuration from
-- **`--force`** (`-f`) - Force deletion of existing configurations with the same name before creating new ones
 
 ### Apply, Delete, and Modify Command Flags
 
@@ -165,16 +156,16 @@ gh security-config generate \
   --secret-scanning enabled --secret-scanning-push-protection enabled \
   --secret-scanning-non-provider-patterns not_set \
   --enforcement enforced \
-  --scope all --set-as-default true --yes
+  --scope all --set-as-default true --force true
 
 # Run apply, delete, or modify non-interactively
 gh security-config apply --all-orgs -e my-enterprise -t template-org \
-  --config-name "org-default" --scope all --set-as-default true --yes
+  --config-name "org-default" --scope all --set-as-default true --force true
 gh security-config delete --all-orgs -e my-enterprise -t template-org \
-  --config-name "org-default" --yes
+  --config-name "org-default" --force true
 gh security-config modify --all-orgs -e my-enterprise -t template-org \
   --config-name "org-default" --new-name "org-default-v2" \
-  --secret-scanning-push-protection enabled --yes
+  --secret-scanning-push-protection enabled --force true
 ```
 
 ### Copying Security Configurations

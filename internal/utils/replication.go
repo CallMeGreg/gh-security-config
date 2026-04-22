@@ -21,7 +21,6 @@ func BuildReplicationCommand(command string, flags map[string]interface{}) strin
 		"org-list",
 		"all-orgs",
 		"copy-from-org",
-		"force",
 		"config-name",
 		"config-description",
 		"new-name",
@@ -40,7 +39,7 @@ func BuildReplicationCommand(command string, flags map[string]interface{}) strin
 		"dependabot-security-updates-available",
 		"concurrency",
 		"delay",
-		"yes",
+		"force",
 	}
 
 	for _, flagName := range flagOrder {
@@ -94,10 +93,9 @@ func getShortFlag(flagName string) string {
 		"dependabot-alerts-available":           "a",
 		"dependabot-security-updates-available": "s",
 		"copy-from-org":                         "o",
-		"force":                                 "f",
 		"template-org":                          "t",
 		"config-name":                           "n",
-		"yes":                                   "y",
+		"force":                                 "f",
 	}
 	return shortFlags[flagName]
 }

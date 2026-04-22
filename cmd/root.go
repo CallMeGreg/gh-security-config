@@ -29,7 +29,10 @@ func init() {
 	rootCmd.PersistentFlags().StringP("github-enterprise-server-url", "u", "", "GitHub Enterprise URL (e.g., github.company.com)")
 	rootCmd.PersistentFlags().StringP("dependabot-alerts-available", "a", "", "Whether Dependabot Alerts are available in your GHES instance (true/false)")
 	rootCmd.PersistentFlags().StringP("dependabot-security-updates-available", "s", "", "Whether Dependabot Security Updates are available in your GHES instance (true/false)")
-	rootCmd.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts (useful for non-interactive / scripted usage)")
+
+	// Flags shared by all subcommands
+	rootCmd.PersistentFlags().StringP("config-name", "n", "", "Name of the security configuration to operate on (replaces the interactive configuration-name prompt for each command)")
+	rootCmd.PersistentFlags().StringP("force", "f", "", "Force the operation without confirmation prompts (true/false). In 'generate', also forces overwrite of existing configurations with the same name.")
 
 	// Mark org targeting flags as mutually exclusive
 	rootCmd.MarkFlagsMutuallyExclusive("org", "org-list", "all-orgs")

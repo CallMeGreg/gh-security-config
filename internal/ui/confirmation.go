@@ -45,7 +45,7 @@ func ConfirmOperation(orgs []string, configName, configDescription string, setti
 	pterm.Println()
 
 	if skipConfirm {
-		pterm.Info.Println("--yes flag provided: skipping confirmation prompt.")
+		pterm.Info.Println("--force=true provided: skipping confirmation prompt.")
 		return true, nil
 	}
 
@@ -72,7 +72,7 @@ func ConfirmDeleteOperation(orgs []string, configName string, skipConfirm bool) 
 	pterm.Println()
 
 	if skipConfirm {
-		pterm.Info.Println("--yes flag provided: skipping confirmation prompt.")
+		pterm.Info.Println("--force=true provided: skipping confirmation prompt.")
 		return true, nil
 	}
 
@@ -126,7 +126,7 @@ func ConfirmModifyOperation(orgs []string, configName, newName, currentDescripti
 	pterm.Println()
 
 	if skipConfirm {
-		pterm.Info.Println("--yes flag provided: skipping confirmation prompt.")
+		pterm.Info.Println("--force=true provided: skipping confirmation prompt.")
 		return true, nil
 	}
 
@@ -267,7 +267,7 @@ func ConfirmApplyOperation(orgs []string, configName, configDescription string, 
 	pterm.Println()
 
 	if skipConfirm {
-		pterm.Info.Println("--yes flag provided: skipping confirmation prompt.")
+		pterm.Info.Println("--force=true provided: skipping confirmation prompt.")
 		return true, nil
 	}
 

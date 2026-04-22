@@ -21,11 +21,9 @@ var generateCmd = &cobra.Command{
 
 func init() {
 	// Command-specific flags
-	generateCmd.Flags().BoolP("force", "f", false, "Force deletion of existing configurations with the same name before creating new ones")
 	generateCmd.Flags().StringP("copy-from-org", "o", "", "Organization name to copy an existing configuration from")
 
 	// Non-interactive input flags
-	generateCmd.Flags().StringP("config-name", "n", "", "Name for the new security configuration (when using --copy-from-org, the name of the source configuration to copy)")
 	generateCmd.Flags().String("config-description", "", "Description for the new security configuration")
 
 	// Security settings (shared with modify)
@@ -52,7 +50,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get generate-specific flags
-	force, err := cmd.Flags().GetBool("force")
+	force, err := extractForceFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -84,11 +82,6 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	setAsDefaultOverride, err := utils.ParseBoolStringFlag("set-as-default", setAsDefaultFlag)
-	if err != nil {
-		return err
-	}
-
-	yesFlag, err := cmd.Flags().GetBool("yes")
 	if err != nil {
 		return err
 	}
@@ -243,8 +236,8 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Confirm before proceeding
-	confirmed, err := ui.ConfirmOperation(orgs, configName, configDescription, settings, scope, setAsDefault, yesFlag)
+	// Confirm before proceeding (force skips the prompt)
+	confirmed, err := ui.ConfirmOperation(orgs, configName, configDescription, settings, scope, setAsDefault, force)
 	if err != nil {
 		return err
 	}
@@ -286,11 +279,10 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		"dependabot-security-updates-available": fmt.Sprintf("%t", dependabotSecurityUpdatesAvailable),
 		"concurrency":                           commonFlags.Concurrency,
 		"delay":                                 commonFlags.Delay,
-		"force":                                 force,
 		"config-name":                           configName,
 		"scope":                                 scope,
 		"set-as-default":                        fmt.Sprintf("%t", setAsDefault),
-		"yes":                                   yesFlag,
+		"force":                                 fmt.Sprintf("%t", force),
 	}
 	if copyFromOrg == "" {
 		// config-description is only meaningful for newly created configurations

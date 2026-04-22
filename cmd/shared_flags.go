@@ -39,6 +39,23 @@ func addSecuritySettingFlags(cmd *cobra.Command) {
 	cmd.Flags().String(securitySettingFlagNames.Enforcement, "", "Enforcement status for the configuration (enforced, unenforced)")
 }
 
+// extractForceFlag reads the universal --force flag. An empty value means "not provided"
+// (false). Any other value must be "true" or "false".
+func extractForceFlag(cmd *cobra.Command) (bool, error) {
+	forceFlag, err := cmd.Flags().GetString("force")
+	if err != nil {
+		return false, err
+	}
+	forceOverride, err := utils.ParseBoolStringFlag("force", forceFlag)
+	if err != nil {
+		return false, err
+	}
+	if forceOverride == nil {
+		return false, nil
+	}
+	return *forceOverride, nil
+}
+
 // extractSecuritySettingOverrides reads each security-setting flag from the command and
 // validates it against its allowed set of values. Any flag that is unset returns an empty
 // string and triggers an interactive prompt downstream.

@@ -24,7 +24,6 @@ func init() {
 	modifyCmd.Flags().StringP("template-org", "t", "", "Template organization to fetch security configurations from (required)")
 
 	// Non-interactive input flags
-	modifyCmd.Flags().StringP("config-name", "n", "", "Name of the security configuration to modify (replaces interactive selection)")
 	modifyCmd.Flags().String("new-name", "", "Updated name for the configuration (empty means keep current)")
 	modifyCmd.Flags().String("new-description", "", "Updated description for the configuration (empty means keep current)")
 
@@ -93,7 +92,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	yesFlag, err := cmd.Flags().GetBool("yes")
+	force, err := extractForceFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -290,7 +289,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	// Confirm before proceeding
-	confirmed, err := ui.ConfirmModifyOperation(orgs, configName, newName, currentDescription, newDescription, currentSettings, newSettings, yesFlag)
+	confirmed, err := ui.ConfirmModifyOperation(orgs, configName, newName, currentDescription, newDescription, currentSettings, newSettings, force)
 	if err != nil {
 		return err
 	}
@@ -339,7 +338,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 		"secret-scanning-push-protection":       fmt.Sprintf("%v", newSettings["secret_scanning_push_protection"]),
 		"secret-scanning-non-provider-patterns": fmt.Sprintf("%v", newSettings["secret_scanning_non_provider_patterns"]),
 		"enforcement":                           fmt.Sprintf("%v", newSettings["enforcement"]),
-		"yes":                                   yesFlag,
+		"force":                                 fmt.Sprintf("%t", force),
 	}
 	if v, ok := newSettings["dependabot_alerts"]; ok {
 		replicationFlags["dependabot-alerts"] = fmt.Sprintf("%v", v)

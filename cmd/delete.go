@@ -22,9 +22,6 @@ var deleteCmd = &cobra.Command{
 func init() {
 	// Add template-org flag specific to delete command
 	deleteCmd.Flags().StringP("template-org", "t", "", "Template organization to fetch security configurations from (required)")
-
-	// Non-interactive input flag
-	deleteCmd.Flags().StringP("config-name", "n", "", "Name of the security configuration to delete (replaces interactive selection)")
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
@@ -74,7 +71,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	yesFlag, err := cmd.Flags().GetBool("yes")
+	force, err := extractForceFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -183,7 +180,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	// Confirm before proceeding
-	confirmed, err := ui.ConfirmDeleteOperation(orgs, configName, yesFlag)
+	confirmed, err := ui.ConfirmDeleteOperation(orgs, configName, force)
 	if err != nil {
 		return err
 	}
@@ -220,7 +217,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		"concurrency":                  commonFlags.Concurrency,
 		"delay":                        commonFlags.Delay,
 		"config-name":                  configName,
-		"yes":                          yesFlag,
+		"force":                        fmt.Sprintf("%t", force),
 	}
 
 	// Add org targeting flags
