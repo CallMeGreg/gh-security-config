@@ -16,19 +16,19 @@ func TestBuildReplicationCommand(t *testing.T) {
 			name:    "Generate with all-orgs and basic flags",
 			command: "generate",
 			flags: map[string]interface{}{
-				"enterprise-slug":              "my-enterprise",
-				"github-enterprise-server-url": "github.company.com",
-				"all-orgs":                     true,
-				"dependabot-alerts-available":  "true",
+				"enterprise-slug":                       "my-enterprise",
+				"github-enterprise-server-url":          "github.company.com",
+				"all-orgs":                              true,
+				"dependabot-alerts-available":           "true",
 				"dependabot-security-updates-available": "false",
 			},
 			expected: []string{
 				"gh security-config generate",
-				"-e my-enterprise",
-				"-u github.company.com",
+				"--enterprise-slug my-enterprise",
+				"--github-enterprise-server-url github.company.com",
 				"--all-orgs",
-				"-a true",
-				"-s false",
+				"--dependabot-alerts-available true",
+				"--dependabot-security-updates-available false",
 			},
 		},
 		{
@@ -41,8 +41,8 @@ func TestBuildReplicationCommand(t *testing.T) {
 			},
 			expected: []string{
 				"gh security-config generate",
-				"-e my-enterprise",
-				"-u github.company.com",
+				"--enterprise-slug my-enterprise",
+				"--github-enterprise-server-url github.company.com",
 				"--org test-org",
 			},
 		},
@@ -56,9 +56,9 @@ func TestBuildReplicationCommand(t *testing.T) {
 			},
 			expected: []string{
 				"gh security-config generate",
-				"-e my-enterprise",
-				"-u github.company.com",
-				"-l orgs.csv",
+				"--enterprise-slug my-enterprise",
+				"--github-enterprise-server-url github.company.com",
+				"--org-list orgs.csv",
 			},
 		},
 		{
@@ -71,9 +71,9 @@ func TestBuildReplicationCommand(t *testing.T) {
 			},
 			expected: []string{
 				"gh security-config generate",
-				"-e my-enterprise",
+				"--enterprise-slug my-enterprise",
 				"--all-orgs",
-				"-c 5",
+				"--concurrency 5",
 			},
 		},
 		{
@@ -86,26 +86,26 @@ func TestBuildReplicationCommand(t *testing.T) {
 			},
 			expected: []string{
 				"gh security-config generate",
-				"-e my-enterprise",
+				"--enterprise-slug my-enterprise",
 				"--all-orgs",
-				"-d 30",
+				"--delay 30",
 			},
 		},
 		{
 			name:    "Generate with force and copy-from-org",
 			command: "generate",
 			flags: map[string]interface{}{
-				"enterprise-slug": "my-enterprise",
-				"all-orgs":        true,
-				"force":           "true",
-				"copy-from-org":   "source-org",
+				"enterprise-slug":           "my-enterprise",
+				"all-orgs":                  true,
+				"skip-confirmation-message": "true",
+				"copy-from-org":             "source-org",
 			},
 			expected: []string{
 				"gh security-config generate",
-				"-e my-enterprise",
+				"--enterprise-slug my-enterprise",
 				"--all-orgs",
-				"-f true",
-				"-o source-org",
+				"--skip-confirmation-message true",
+				"--copy-from-org source-org",
 			},
 		},
 		{
@@ -119,9 +119,9 @@ func TestBuildReplicationCommand(t *testing.T) {
 			},
 			expected: []string{
 				"gh security-config apply",
-				"-e my-enterprise",
-				"-u github.company.com",
-				"-t template-org",
+				"--enterprise-slug my-enterprise",
+				"--github-enterprise-server-url github.company.com",
+				"--template-org template-org",
 				"--all-orgs",
 			},
 		},
@@ -135,8 +135,8 @@ func TestBuildReplicationCommand(t *testing.T) {
 			},
 			expected: []string{
 				"gh security-config modify",
-				"-e my-enterprise",
-				"-t template-org",
+				"--enterprise-slug my-enterprise",
+				"--template-org template-org",
 				"--org test-org",
 			},
 		},
@@ -150,9 +150,9 @@ func TestBuildReplicationCommand(t *testing.T) {
 			},
 			expected: []string{
 				"gh security-config delete",
-				"-e my-enterprise",
-				"-t template-org",
-				"-l orgs.csv",
+				"--enterprise-slug my-enterprise",
+				"--template-org template-org",
+				"--org-list orgs.csv",
 			},
 		},
 		{
@@ -172,13 +172,13 @@ func TestBuildReplicationCommand(t *testing.T) {
 				"enforcement":                           "enforced",
 				"scope":                                 "all",
 				"set-as-default":                        "true",
-				"force":                                 "true",
+				"skip-confirmation-message":             "true",
 			},
 			expected: []string{
 				"gh security-config generate",
-				"-e my-enterprise",
+				"--enterprise-slug my-enterprise",
 				"--all-orgs",
-				"-n my-config",
+				"--config-name my-config",
 				"--config-description desc",
 				"--advanced-security enabled",
 				"--dependabot-alerts enabled",
@@ -189,48 +189,48 @@ func TestBuildReplicationCommand(t *testing.T) {
 				"--enforcement enforced",
 				"--scope all",
 				"--set-as-default true",
-				"-f true",
+				"--skip-confirmation-message true",
 			},
 		},
 		{
 			name:    "Apply with config-name and scope",
 			command: "apply",
 			flags: map[string]interface{}{
-				"enterprise-slug": "my-enterprise",
-				"template-org":    "template-org",
-				"all-orgs":        true,
-				"config-name":     "prod",
-				"config-source":   "organization",
-				"scope":           "public",
-				"set-as-default":  "false",
-				"force":           "true",
+				"enterprise-slug":           "my-enterprise",
+				"template-org":              "template-org",
+				"all-orgs":                  true,
+				"config-name":               "prod",
+				"config-source":             "organization",
+				"scope":                     "public",
+				"set-as-default":            "false",
+				"skip-confirmation-message": "true",
 			},
 			expected: []string{
 				"gh security-config apply",
-				"-e my-enterprise",
-				"-t template-org",
+				"--enterprise-slug my-enterprise",
+				"--template-org template-org",
 				"--all-orgs",
-				"-n prod",
+				"--config-name prod",
 				"--config-source organization",
 				"--scope public",
 				"--set-as-default false",
-				"-f true",
+				"--skip-confirmation-message true",
 			},
 		},
 		{
 			name:    "Delete with config-name and force",
 			command: "delete",
 			flags: map[string]interface{}{
-				"enterprise-slug": "my-enterprise",
-				"template-org":    "template-org",
-				"all-orgs":        true,
-				"config-name":     "old-config",
-				"force":           "true",
+				"enterprise-slug":           "my-enterprise",
+				"template-org":              "template-org",
+				"all-orgs":                  true,
+				"config-name":               "old-config",
+				"skip-confirmation-message": "true",
 			},
 			expected: []string{
 				"gh security-config delete",
-				"-n old-config",
-				"-f true",
+				"--config-name old-config",
+				"--skip-confirmation-message true",
 			},
 		},
 		{
@@ -246,7 +246,7 @@ func TestBuildReplicationCommand(t *testing.T) {
 			},
 			expected: []string{
 				"gh security-config modify",
-				"-n old",
+				"--config-name old",
 				"--new-name new",
 				"--new-description updated",
 			},
@@ -261,8 +261,8 @@ func TestBuildReplicationCommand(t *testing.T) {
 			},
 			expected: []string{
 				"gh security-config generate",
-				"-e \"my enterprise\"",
-				"-u github.company.com",
+				"--enterprise-slug \"my enterprise\"",
+				"--github-enterprise-server-url github.company.com",
 				"--all-orgs",
 			},
 		},
@@ -321,36 +321,6 @@ func TestQuoteIfNeeded(t *testing.T) {
 			result := quoteIfNeeded(tt.input)
 			if result != tt.expected {
 				t.Errorf("quoteIfNeeded() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestGetShortFlag(t *testing.T) {
-	tests := []struct {
-		flagName string
-		expected string
-	}{
-		{"org-list", "l"},
-		{"concurrency", "c"},
-		{"delay", "d"},
-		{"enterprise-slug", "e"},
-		{"github-enterprise-server-url", "u"},
-		{"dependabot-alerts-available", "a"},
-		{"dependabot-security-updates-available", "s"},
-		{"copy-from-org", "o"},
-		{"force", "f"},
-		{"template-org", "t"},
-		{"config-name", "n"},
-		{"force", "f"},
-		{"unknown-flag", ""}, // Should return empty string for unknown flags
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.flagName, func(t *testing.T) {
-			result := getShortFlag(tt.flagName)
-			if result != tt.expected {
-				t.Errorf("getShortFlag(%q) = %q, want %q", tt.flagName, result, tt.expected)
 			}
 		})
 	}

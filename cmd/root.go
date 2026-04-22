@@ -32,7 +32,7 @@ func init() {
 
 	// Flags shared by all subcommands
 	rootCmd.PersistentFlags().StringP("config-name", "n", "", "Name of the security configuration to operate on (replaces the interactive configuration-name prompt for each command)")
-	rootCmd.PersistentFlags().StringP("force", "f", "", "Force the operation without confirmation prompts (true/false). In 'generate', also forces overwrite of existing configurations with the same name.")
+	rootCmd.PersistentFlags().String("skip-confirmation-message", "", "Automatically approve the final confirmation prompt for any command (true/false)")
 
 	// Mark org targeting flags as mutually exclusive
 	rootCmd.MarkFlagsMutuallyExclusive("org", "org-list", "all-orgs")

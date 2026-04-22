@@ -42,6 +42,45 @@ The extension provides four main commands for managing security configurations a
 - **`modify`** - Update existing security configurations across organizations
 - **`delete`** - Remove existing security configurations from organizations
 
+### Quick Start
+
+```bash
+# Create a new security configuration
+gh security-config generate
+
+# Apply an existing security configuration to all orgs
+gh security-config apply --all-orgs
+
+# Modify a security configuration for a CSV list of organizations
+gh security-config modify --org-list orgs.csv
+
+# Delete a security configuration from a single org
+gh security-config delete --org first-org
+
+# Use flags to skip interactive prompts
+gh security-config generate --all-orgs -e my-enterprise -u github.mycompany.com -a true -s false
+
+# Use concurrent processing for faster execution (up to 20 organizations at once)
+gh security-config generate --all-orgs --concurrency 5
+
+# Use delayed processing to avoid rate limits and reduce system overhead (30 second delay between organizations)
+gh security-config generate --org-list orgs.csv --delay 30
+
+# Run generate non-interactively in a single call
+gh security-config generate \
+  --all-orgs -e my-enterprise -u github.mycompany.com -a true -s false \
+  --config-name "org-default" --config-description "Org default security configuration" \
+  --advanced-security enabled \
+  --dependabot-alerts enabled --dependabot-security-updates not_set \
+  --secret-scanning enabled --secret-scanning-push-protection enabled \
+  --secret-scanning-non-provider-patterns not_set \
+  --enforcement enforced \
+  --scope all --set-as-default true --skip-confirmation-message true
+```
+
+> [!TIP]
+> The replication command printed at the end of each run emits the full set of flags used (including any values chosen interactively), so the exact invocation can be re-run non-interactively.
+
 ### Persistent Flags
 
 These flags are available on all commands:
@@ -61,11 +100,7 @@ These flags are available on all commands:
 - **`--dependabot-alerts-available string`** (`-a`) - Whether Dependabot Alerts are available in your GHES instance (true/false)
 - **`--dependabot-security-updates-available string`** (`-s`) - Whether Dependabot Security Updates are available in your GHES instance (true/false)
 - **`--config-name string`** (`-n`) - Name of the security configuration to operate on. Replaces the interactive configuration-name prompt for each command (the meaning is command-specific: the name to create in `generate`, the name to select in `apply`/`delete`/`modify`, or the name of the source config in `generate --copy-from-org`).
-- **`--force string`** (`-f`) - Force the operation without confirmation prompts (`true`/`false`). In `generate`, also forces overwrite of existing configurations with the same name (previous behavior of the generate-specific `--force` flag).
-
-### Non-Interactive Input Flags
-
-All commands can be run non-interactively in a single call by passing the corresponding flags for each interactive prompt. Any flag that is omitted falls back to its interactive prompt, so these flags can also be mixed and matched to only pre-fill a subset of inputs. The universal flags `--config-name` / `-n` and `--force` / `-f` are documented above under "Persistent Flags".
+- **`--skip-confirmation-message string`** - Automatically approve the final confirmation prompt for any command (`true`/`false`).
 
 #### `generate` Command Flags
 
@@ -81,6 +116,7 @@ All commands can be run non-interactively in a single call by passing the corres
 | `--enforcement` | "Enforcement Status" (`enforced`, `unenforced`) |
 | `--scope` | "Select repositories to attach configuration to" (`all`, `public`, `private_or_internal`, `none`) |
 | `--set-as-default` | "Set this configuration as default for new repositories?" (`true`, `false`) |
+| `--overwrite` | Overwrite any existing configuration with the same name instead of skipping (`true`, `false`) |
 
 #### `apply` Command Flags
 
@@ -92,7 +128,7 @@ All commands can be run non-interactively in a single call by passing the corres
 
 #### `delete` Command Flags
 
-The `delete` command uses only the universal `--config-name` and `--force` flags (plus `--template-org`). No additional command-specific input flags.
+The `delete` command uses only the universal `--config-name` and `--skip-confirmation-message` flags (plus `--template-org`). No additional command-specific input flags.
 
 #### `modify` Command Flags
 
@@ -107,81 +143,6 @@ The `delete` command uses only the universal `--config-name` and `--force` flags
 | `--secret-scanning-push-protection` | Update prompt for Secret Scanning Push Protection (`enabled`, `disabled`, `not_set`) |
 | `--secret-scanning-non-provider-patterns` | Update prompt for Secret Scanning Non-Provider Patterns (`enabled`, `disabled`, `not_set`) |
 | `--enforcement` | Update prompt for Enforcement Status (`enforced`, `unenforced`) |
-
-> [!NOTE]
-> The replication command printed at the end of each run now emits the full set of flags used (including any values chosen interactively), so the exact invocation can be re-run non-interactively.
-
-### Generate Command Flags
-
-The `generate` command has additional flags:
-
-- **`--copy-from-org string`** (`-o`) - Organization name to copy an existing configuration from
-
-### Apply, Delete, and Modify Command Flags
-
-The `apply`, `delete`, and `modify` commands have an additional required flag:
-
-- **`--template-org string`** (`-t`) - Template organization to fetch security configurations from. This organization is used as the source of truth for security configuration settings. If not provided, you will be prompted to enter it interactively.
-
-### Basic Usage Examples
-
-```bash
-# Create a new security configuration
-gh security-config generate
-
-# Apply an existing security configuration to all orgs
-gh security-config apply --all-orgs
-
-# Modify a security configuration
-gh security-config modify
-
-# Delete a security configuration from a CSV list of organizations
-gh security-config delete --org-list orgs.csv
-
-# Use flags to skip interactive prompts
-gh security-config generate --all-orgs -e my-enterprise -u github.mycompany.com -a true -s false
-
-# Use concurrent processing for faster execution (up to 20 organizations at once)
-gh security-config generate --all-orgs --concurrency 5
-
-# Use delayed processing to avoid rate limits and reduce system overhead (30 second delay between organizations)
-gh security-config generate --org-list orgs.csv --delay 30
-
-# Run generate fully non-interactively in a single call
-gh security-config generate \
-  --all-orgs -e my-enterprise -u github.mycompany.com -a true -s false \
-  --config-name "org-default" --config-description "Org default security configuration" \
-  --advanced-security enabled \
-  --dependabot-alerts enabled --dependabot-security-updates not_set \
-  --secret-scanning enabled --secret-scanning-push-protection enabled \
-  --secret-scanning-non-provider-patterns not_set \
-  --enforcement enforced \
-  --scope all --set-as-default true --force true
-
-# Run apply, delete, or modify non-interactively
-gh security-config apply --all-orgs -e my-enterprise -t template-org \
-  --config-name "org-default" --scope all --set-as-default true --force true
-gh security-config delete --all-orgs -e my-enterprise -t template-org \
-  --config-name "org-default" --force true
-gh security-config modify --all-orgs -e my-enterprise -t template-org \
-  --config-name "org-default" --new-name "org-default-v2" \
-  --secret-scanning-push-protection enabled --force true
-```
-
-### Copying Security Configurations
-
-The `--copy-from-org` flag allows you to copy an existing security configuration from one organization and apply it to other organizations in your enterprise. This is useful for:
-
-- **Standardizing configurations**: Copy a well-tested configuration across multiple organizations
-- **Quick setup**: Avoid recreating similar configurations from scratch
-- **Configuration migration**: Move configurations between organizations
-
-#### How it works:
-
-1. **Source Organization Access**: You must be an owner of the source organization to copy configurations
-2. **Configuration Selection**: Choose from available security configurations in the source organization
-3. **Settings Review**: Review the configuration details that will be copied
-4. **Target Filtering**: The source organization is automatically excluded from target organizations to prevent self-copying
 
 > [!NOTE]
 > When using `--copy-from-org`, you can still customize the repository attachment scope and default setting for the target organizations, even though the security settings themselves are copied from the source.
@@ -203,7 +164,7 @@ Process multiple organizations simultaneously to improve performance:
 > **Rate Limiting Considerations**: Setting concurrency higher than 1 increases the likelihood of encountering GitHub's secondary rate limits. To avoid rate limiting issues, consider [exempting the user from rate limits](https://docs.github.com/en/enterprise-server@3.15/admin/administering-your-instance/administering-your-instance-from-the-command-line/command-line-utilities#ghe-config).
 
 
-#### Sequential Processing with Delay (`--delay`)
+#### Sequential Processing with Optional Delay (`--delay`)
 
 Process organizations one at a time with a configurable delay between each:
 
@@ -222,51 +183,7 @@ Dependabot Alerts and Security Updates have different availability requirements:
 
 **Checking Availability**: Navigate to `Enterprise settings` → `Settings` → `Code security and analysis` to verify which features are available.
 
-### Apply Security Configurations
-
-The extension will guide you through:
-
-1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
-2. **Template Organization**: Specify the template organization from which to fetch the security configuration
-3. **Organization Targeting**: If not provided via flags, select whether to target all orgs, a single org, or orgs from a CSV file
-4. **Configuration Selection**: Select from available security configurations in the template organization
-5. **Repository Selection**: Choose which repositories should have the configuration applied
-6. **Confirmation**: Review the operation summary and confirm application
-
-> [!NOTE]
-> The apply operation fetches the security configuration from the specified template organization and applies it to repositories across the targeted organizations. The template org serves as the source of truth for the configuration settings.
-
-### Delete Security Configurations
-
-The extension will guide you through:
-
-1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
-2. **Template Organization**: Specify the template organization from which to reference the security configuration
-3. **Organization Targeting**: If not provided via flags, select whether to target all orgs, a single org, or orgs from a CSV file
-4. **Configuration Selection**: Specify the name of the security configuration to delete
-5. **Confirmation**: Review the operation summary and confirm deletion (defaults to cancel for safety)
-
-> [!WARNING]
-> The delete operation will remove the specified security configuration from the targeted organizations. This action cannot be undone. Repositories will retain their security settings but will no longer be associated with the configuration.
-
-### Modify Security Configurations
-
-The extension will guide you through:
-
-1. **Enterprise Setup**: Enter your GitHub Enterprise slug and server URL (if using GitHub Enterprise Server)
-2. **Template Organization**: Specify the template organization from which to fetch the current security configuration
-3. **Organization Targeting**: If not provided via flags, select whether to target all orgs, a single org, or orgs from a CSV file
-4. **Configuration Selection**: Specify the name of the security configuration to modify
-5. **Current Settings Display**: View the current configuration settings and description from the template organization
-4. **Name Update**: Update the configuration name (optional)
-5. **Description Update**: Update the configuration description (optional)
-6. **Settings Update**: Interactively update each security setting with options to keep current values
-7. **Confirmation**: Review the changes and confirm modification before execution
-
-> [!NOTE]
-> The modify operation will update the specified security configuration across ALL organizations in the enterprise where it exists. Organizations without the configuration will be skipped.
-
-## Security Settings
+## Security Configuration Settings
 
 The extension allows you to set the following features within the security configuration:
 
@@ -317,7 +234,7 @@ To run the extension locally:
 
 1. Fork the repository
 2. Make your changes
-3. Submit a pull request
+3. Open a pull request
 
 ## License
 

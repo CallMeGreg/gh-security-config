@@ -16,7 +16,7 @@ type GenerateProcessor struct {
 	Settings          map[string]interface{}
 	Scope             string
 	SetAsDefault      bool
-	Force             bool
+	Overwrite         bool
 }
 
 // ProcessOrganization processes a single organization for the generate command
@@ -45,9 +45,9 @@ func (gp *GenerateProcessor) processOrganization(org string) error {
 	// Check if configuration already exists
 	existingConfigID, exists := api.FindConfigurationByName(configs, gp.ConfigName)
 	if exists {
-		if gp.Force {
+		if gp.Overwrite {
 			// Delete the existing configuration
-			pterm.Info.Printf("Force flag enabled: deleting existing configuration '%s' from organization '%s'\n", gp.ConfigName, org)
+			pterm.Info.Printf("Overwrite flag enabled: deleting existing configuration '%s' from organization '%s'\n", gp.ConfigName, org)
 			err = api.DeleteSecurityConfiguration(org, existingConfigID)
 			if err != nil {
 				return fmt.Errorf("failed to delete existing security configuration: %w", err)

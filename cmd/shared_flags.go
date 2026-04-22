@@ -39,21 +39,38 @@ func addSecuritySettingFlags(cmd *cobra.Command) {
 	cmd.Flags().String(securitySettingFlagNames.Enforcement, "", "Enforcement status for the configuration (enforced, unenforced)")
 }
 
-// extractForceFlag reads the universal --force flag. An empty value means "not provided"
-// (false). Any other value must be "true" or "false".
-func extractForceFlag(cmd *cobra.Command) (bool, error) {
-	forceFlag, err := cmd.Flags().GetString("force")
+// extractSkipConfirmationFlag reads the universal --skip-confirmation-message flag. An
+// empty value means "not provided" (false). Any other value must be "true" or "false".
+func extractSkipConfirmationFlag(cmd *cobra.Command) (bool, error) {
+	flagVal, err := cmd.Flags().GetString("skip-confirmation-message")
 	if err != nil {
 		return false, err
 	}
-	forceOverride, err := utils.ParseBoolStringFlag("force", forceFlag)
+	override, err := utils.ParseBoolStringFlag("skip-confirmation-message", flagVal)
 	if err != nil {
 		return false, err
 	}
-	if forceOverride == nil {
+	if override == nil {
 		return false, nil
 	}
-	return *forceOverride, nil
+	return *override, nil
+}
+
+// extractOverwriteFlag reads the generate-specific --overwrite flag. An empty value
+// means "not provided" (false). Any other value must be "true" or "false".
+func extractOverwriteFlag(cmd *cobra.Command) (bool, error) {
+	overwriteFlag, err := cmd.Flags().GetString("overwrite")
+	if err != nil {
+		return false, err
+	}
+	overwriteOverride, err := utils.ParseBoolStringFlag("overwrite", overwriteFlag)
+	if err != nil {
+		return false, err
+	}
+	if overwriteOverride == nil {
+		return false, nil
+	}
+	return *overwriteOverride, nil
 }
 
 // extractSecuritySettingOverrides reads each security-setting flag from the command and

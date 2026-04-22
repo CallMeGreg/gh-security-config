@@ -32,6 +32,7 @@ func init() {
 	// Application options
 	generateCmd.Flags().String("scope", "", "Repository attachment scope (all, public, private_or_internal, none)")
 	generateCmd.Flags().String("set-as-default", "", "Whether to set this configuration as default for new repositories (true/false)")
+	generateCmd.Flags().String("overwrite", "", "Overwrite any existing configuration with the same name instead of skipping (true/false)")
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
@@ -50,7 +51,12 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get generate-specific flags
-	force, err := extractForceFlag(cmd)
+	force, err := extractSkipConfirmationFlag(cmd)
+	if err != nil {
+		return err
+	}
+
+	overwrite, err := extractOverwriteFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -254,7 +260,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		Settings:          settings,
 		Scope:             scope,
 		SetAsDefault:      setAsDefault,
-		Force:             force,
+		Overwrite:         overwrite,
 	}
 
 	// Process each organization - use sequential processor if delay is specified
@@ -282,7 +288,8 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		"config-name":                           configName,
 		"scope":                                 scope,
 		"set-as-default":                        fmt.Sprintf("%t", setAsDefault),
-		"force":                                 fmt.Sprintf("%t", force),
+		"skip-confirmation-message":             fmt.Sprintf("%t", force),
+		"overwrite":                             fmt.Sprintf("%t", overwrite),
 	}
 	if copyFromOrg == "" {
 		// The config-description and explicit per-setting flags only apply when creating

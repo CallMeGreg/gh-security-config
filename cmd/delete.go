@@ -71,7 +71,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	force, err := extractForceFlag(cmd)
+	force, err := extractSkipConfirmationFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -217,7 +217,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		"concurrency":                  commonFlags.Concurrency,
 		"delay":                        commonFlags.Delay,
 		"config-name":                  configName,
-		"force":                        fmt.Sprintf("%t", force),
+		"skip-confirmation-message":                      fmt.Sprintf("%t", force),
 	}
 
 	// Add org targeting flags

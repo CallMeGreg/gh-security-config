@@ -104,7 +104,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	force, err := extractForceFlag(cmd)
+	force, err := extractSkipConfirmationFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -345,7 +345,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 		"config-source":                targetType,
 		"scope":                        scope,
 		"set-as-default":               fmt.Sprintf("%t", setAsDefault),
-		"force":                        fmt.Sprintf("%t", force),
+		"skip-confirmation-message":                      fmt.Sprintf("%t", force),
 	}
 
 	// Add org targeting flags

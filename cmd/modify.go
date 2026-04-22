@@ -92,7 +92,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	force, err := extractForceFlag(cmd)
+	force, err := extractSkipConfirmationFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -338,7 +338,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 		"secret-scanning-push-protection":       fmt.Sprintf("%v", newSettings["secret_scanning_push_protection"]),
 		"secret-scanning-non-provider-patterns": fmt.Sprintf("%v", newSettings["secret_scanning_non_provider_patterns"]),
 		"enforcement":                           fmt.Sprintf("%v", newSettings["enforcement"]),
-		"force":                                 fmt.Sprintf("%t", force),
+		"skip-confirmation-message":                               fmt.Sprintf("%t", force),
 	}
 	if v, ok := newSettings["dependabot_alerts"]; ok {
 		replicationFlags["dependabot-alerts"] = fmt.Sprintf("%v", v)
