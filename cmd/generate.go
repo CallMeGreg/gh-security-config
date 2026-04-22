@@ -285,7 +285,9 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		"force":                                 fmt.Sprintf("%t", force),
 	}
 	if copyFromOrg == "" {
-		// config-description is only meaningful for newly created configurations
+		// The config-description and explicit per-setting flags only apply when creating
+		// a new configuration from scratch. When copying from another org, the source
+		// configuration supplies those values, so they're intentionally omitted here.
 		replicationFlags["config-description"] = configDescription
 		// Include each security setting as a flag so the command is fully reproducible
 		replicationFlags["advanced-security"] = fmt.Sprintf("%v", settings["advanced_security"])
