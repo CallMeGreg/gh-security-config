@@ -66,6 +66,16 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	configNameFlag, err := cmd.Flags().GetString("config-name")
+	if err != nil {
+		return err
+	}
+
+	force, err := extractSkipConfirmationFlag(cmd)
+	if err != nil {
+		return err
+	}
+
 	// Get enterprise name
 	enterprise, err := ui.GetEnterpriseInput(enterpriseFlag)
 	if err != nil {
@@ -150,7 +160,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	// Let user select a configuration to delete
 	var configName string
 	if len(orgConfigNames) > 0 {
-		configName, err = ui.SelectConfigurationForDeletion(orgConfigNames)
+		configName, err = ui.SelectConfigurationForDeletion(orgConfigNames, configNameFlag)
 		if err != nil {
 			return err
 		}
@@ -170,7 +180,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	// Confirm before proceeding
-	confirmed, err := ui.ConfirmDeleteOperation(orgs, configName)
+	confirmed, err := ui.ConfirmDeleteOperation(orgs, configName, force)
 	if err != nil {
 		return err
 	}
@@ -206,6 +216,8 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		"template-org":                 templateOrg,
 		"concurrency":                  commonFlags.Concurrency,
 		"delay":                        commonFlags.Delay,
+		"config-name":                  configName,
+		"skip-confirmation-message":                      fmt.Sprintf("%t", force),
 	}
 
 	// Add org targeting flags

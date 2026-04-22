@@ -30,6 +30,10 @@ func init() {
 	rootCmd.PersistentFlags().StringP("dependabot-alerts-available", "a", "", "Whether Dependabot Alerts are available in your GHES instance (true/false)")
 	rootCmd.PersistentFlags().StringP("dependabot-security-updates-available", "s", "", "Whether Dependabot Security Updates are available in your GHES instance (true/false)")
 
+	// Flags shared by all subcommands
+	rootCmd.PersistentFlags().StringP("config-name", "n", "", "Name of the security configuration to operate on (replaces the interactive configuration-name prompt for each command)")
+	rootCmd.PersistentFlags().String("skip-confirmation-message", "", "Automatically approve the final confirmation prompt for any command (true/false)")
+
 	// Mark org targeting flags as mutually exclusive
 	rootCmd.MarkFlagsMutuallyExclusive("org", "org-list", "all-orgs")
 

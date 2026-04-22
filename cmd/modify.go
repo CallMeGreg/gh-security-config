@@ -22,6 +22,14 @@ var modifyCmd = &cobra.Command{
 func init() {
 	// Add template-org flag specific to modify command
 	modifyCmd.Flags().StringP("template-org", "t", "", "Template organization to fetch security configurations from (required)")
+
+	// Non-interactive input flags
+	modifyCmd.Flags().String("new-name", "", "Updated name for the configuration (empty means keep current)")
+	modifyCmd.Flags().String("new-description", "", "Updated description for the configuration (empty means keep current)")
+
+	// Security settings (shared with generate): override specific settings non-interactively.
+	// Any setting omitted keeps the current value.
+	addSecuritySettingFlags(modifyCmd)
 }
 
 func runModify(cmd *cobra.Command, args []string) error {
@@ -62,6 +70,29 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	templateOrgFlag, err := cmd.Flags().GetString("template-org")
+	if err != nil {
+		return err
+	}
+
+	configNameFlag, err := cmd.Flags().GetString("config-name")
+	if err != nil {
+		return err
+	}
+	newNameFlag, err := cmd.Flags().GetString("new-name")
+	if err != nil {
+		return err
+	}
+	newDescriptionFlag, err := cmd.Flags().GetString("new-description")
+	if err != nil {
+		return err
+	}
+
+	settingsOverrides, err := extractSecuritySettingOverrides(cmd)
+	if err != nil {
+		return err
+	}
+
+	force, err := extractSkipConfirmationFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -178,7 +209,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	// Let user select a configuration to modify
 	var configName string
 	if len(orgConfigNames) > 0 {
-		configName, err = ui.SelectConfigurationForModification(orgConfigNames)
+		configName, err = ui.SelectConfigurationForModification(orgConfigNames, configNameFlag)
 		if err != nil {
 			return err
 		}
@@ -240,25 +271,25 @@ func runModify(cmd *cobra.Command, args []string) error {
 	pterm.Println()
 
 	// Get new name
-	newName, err := ui.GetUpdatedName(configName)
+	newName, err := ui.GetUpdatedName(configName, newNameFlag)
 	if err != nil {
 		return err
 	}
 
 	// Get new description
-	newDescription, err := ui.GetUpdatedDescription(currentDescription)
+	newDescription, err := ui.GetUpdatedDescription(currentDescription, newDescriptionFlag)
 	if err != nil {
 		return err
 	}
 
 	// Get updated security settings
-	newSettings, err := ui.GetSecuritySettingsForUpdate(currentSettings, dependabotAlertsAvailable, dependabotSecurityUpdatesAvailable)
+	newSettings, err := ui.GetSecuritySettingsForUpdate(currentSettings, settingsOverrides, dependabotAlertsAvailable, dependabotSecurityUpdatesAvailable)
 	if err != nil {
 		return err
 	}
 
 	// Confirm before proceeding
-	confirmed, err := ui.ConfirmModifyOperation(orgs, configName, newName, currentDescription, newDescription, currentSettings, newSettings)
+	confirmed, err := ui.ConfirmModifyOperation(orgs, configName, newName, currentDescription, newDescription, currentSettings, newSettings, force)
 	if err != nil {
 		return err
 	}
@@ -299,6 +330,21 @@ func runModify(cmd *cobra.Command, args []string) error {
 		"dependabot-security-updates-available": fmt.Sprintf("%t", dependabotSecurityUpdatesAvailable),
 		"concurrency":                           commonFlags.Concurrency,
 		"delay":                                 commonFlags.Delay,
+		"config-name":                           configName,
+		"new-name":                              newName,
+		"new-description":                       newDescription,
+		"advanced-security":                     fmt.Sprintf("%v", newSettings["advanced_security"]),
+		"secret-scanning":                       fmt.Sprintf("%v", newSettings["secret_scanning"]),
+		"secret-scanning-push-protection":       fmt.Sprintf("%v", newSettings["secret_scanning_push_protection"]),
+		"secret-scanning-non-provider-patterns": fmt.Sprintf("%v", newSettings["secret_scanning_non_provider_patterns"]),
+		"enforcement":                           fmt.Sprintf("%v", newSettings["enforcement"]),
+		"skip-confirmation-message":                               fmt.Sprintf("%t", force),
+	}
+	if v, ok := newSettings["dependabot_alerts"]; ok {
+		replicationFlags["dependabot-alerts"] = fmt.Sprintf("%v", v)
+	}
+	if v, ok := newSettings["dependabot_security_updates"]; ok {
+		replicationFlags["dependabot-security-updates"] = fmt.Sprintf("%v", v)
 	}
 
 	// Add org targeting flags

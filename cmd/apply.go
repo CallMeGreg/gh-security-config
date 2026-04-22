@@ -25,6 +25,11 @@ For GHES 3.16+, this command supports both organization-level and enterprise-lev
 func init() {
 	// Add template-org flag specific to apply command
 	applyCmd.Flags().StringP("template-org", "t", "", "Template organization to fetch security configurations from (required)")
+
+	// Non-interactive input flags
+	applyCmd.Flags().String("config-source", "", "Source of the configuration to apply when --config-name is ambiguous (organization, enterprise)")
+	applyCmd.Flags().String("scope", "", "Repository attachment scope (all, public, private_or_internal)")
+	applyCmd.Flags().String("set-as-default", "", "Whether to set this configuration as default for new repositories (true/false)")
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
@@ -65,6 +70,41 @@ func runApply(cmd *cobra.Command, args []string) error {
 	}
 
 	templateOrgFlag, err := cmd.Flags().GetString("template-org")
+	if err != nil {
+		return err
+	}
+
+	configNameFlag, err := cmd.Flags().GetString("config-name")
+	if err != nil {
+		return err
+	}
+
+	configSourceFlag, err := cmd.Flags().GetString("config-source")
+	if err != nil {
+		return err
+	}
+	if err := utils.ValidateEnumValue("config-source", configSourceFlag, []string{"organization", "enterprise"}); err != nil {
+		return err
+	}
+
+	scopeFlag, err := cmd.Flags().GetString("scope")
+	if err != nil {
+		return err
+	}
+	if err := utils.ValidateEnumValue("scope", scopeFlag, []string{"all", "public", "private_or_internal"}); err != nil {
+		return err
+	}
+
+	setAsDefaultFlag, err := cmd.Flags().GetString("set-as-default")
+	if err != nil {
+		return err
+	}
+	setAsDefaultOverride, err := utils.ParseBoolStringFlag("set-as-default", setAsDefaultFlag)
+	if err != nil {
+		return err
+	}
+
+	force, err := extractSkipConfirmationFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -188,7 +228,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 	var configName string
 	var targetType string
 	if len(enterpriseConfigNames) > 0 || len(orgConfigNames) > 0 {
-		configName, targetType, err = ui.SelectConfigurationFromList(orgConfigNames, enterpriseConfigNames)
+		configName, targetType, err = ui.SelectConfigurationFromList(orgConfigNames, enterpriseConfigNames, configNameFlag, configSourceFlag)
 		if err != nil {
 			return err
 		}
@@ -248,19 +288,19 @@ func runApply(cmd *cobra.Command, args []string) error {
 	pterm.Println()
 
 	// Get repository attachment scope (without 'none' option)
-	scope, err := ui.GetAttachmentScopeForApplication()
+	scope, err := ui.GetAttachmentScopeForApplication(scopeFlag)
 	if err != nil {
 		return err
 	}
 
 	// Get default setting
-	setAsDefault, err := ui.GetDefaultSetting()
+	setAsDefault, err := ui.GetDefaultSetting(setAsDefaultOverride)
 	if err != nil {
 		return err
 	}
 
 	// Confirm before proceeding
-	confirmed, err := ui.ConfirmApplyOperation(orgs, configName, configDetails.Description, configDetails.Settings, scope, setAsDefault)
+	confirmed, err := ui.ConfirmApplyOperation(orgs, configName, configDetails.Description, configDetails.Settings, scope, setAsDefault, force)
 	if err != nil {
 		return err
 	}
@@ -301,6 +341,11 @@ func runApply(cmd *cobra.Command, args []string) error {
 		"template-org":                 templateOrg,
 		"concurrency":                  commonFlags.Concurrency,
 		"delay":                        commonFlags.Delay,
+		"config-name":                  configName,
+		"config-source":                targetType,
+		"scope":                        scope,
+		"set-as-default":               fmt.Sprintf("%t", setAsDefault),
+		"skip-confirmation-message":                      fmt.Sprintf("%t", force),
 	}
 
 	// Add org targeting flags

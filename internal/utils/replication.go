@@ -21,11 +21,26 @@ func BuildReplicationCommand(command string, flags map[string]interface{}) strin
 		"org-list",
 		"all-orgs",
 		"copy-from-org",
-		"force",
+		"config-name",
+		"config-description",
+		"new-name",
+		"new-description",
+		"config-source",
+		"advanced-security",
+		"dependabot-alerts",
+		"dependabot-security-updates",
+		"secret-scanning",
+		"secret-scanning-push-protection",
+		"secret-scanning-non-provider-patterns",
+		"enforcement",
+		"scope",
+		"set-as-default",
 		"dependabot-alerts-available",
 		"dependabot-security-updates-available",
 		"concurrency",
 		"delay",
+		"skip-confirmation-message",
+		"overwrite",
 	}
 
 	for _, flagName := range flagOrder {
@@ -33,56 +48,23 @@ func BuildReplicationCommand(command string, flags map[string]interface{}) strin
 			switch v := value.(type) {
 			case string:
 				if v != "" {
-					// Determine the short flag if available
-					shortFlag := getShortFlag(flagName)
-					if shortFlag != "" {
-						parts = append(parts, fmt.Sprintf("-%s %s", shortFlag, quoteIfNeeded(v)))
-					} else {
-						parts = append(parts, fmt.Sprintf("--%s %s", flagName, quoteIfNeeded(v)))
-					}
+					parts = append(parts, fmt.Sprintf("--%s %s", flagName, quoteIfNeeded(v)))
 				}
 			case bool:
 				if v {
 					// Boolean flags don't need a value
-					shortFlag := getShortFlag(flagName)
-					if shortFlag != "" {
-						parts = append(parts, fmt.Sprintf("-%s", shortFlag))
-					} else {
-						parts = append(parts, fmt.Sprintf("--%s", flagName))
-					}
+					parts = append(parts, fmt.Sprintf("--%s", flagName))
 				}
 			case int:
 				if (flagName == "concurrency" && v != 1) || (flagName == "delay" && v != 0) {
 					// Only include concurrency if it's not the default (1) or delay if it's not default (0)
-					shortFlag := getShortFlag(flagName)
-					if shortFlag != "" {
-						parts = append(parts, fmt.Sprintf("-%s %d", shortFlag, v))
-					} else {
-						parts = append(parts, fmt.Sprintf("--%s %d", flagName, v))
-					}
+					parts = append(parts, fmt.Sprintf("--%s %d", flagName, v))
 				}
 			}
 		}
 	}
 
 	return strings.Join(parts, " ")
-}
-
-// getShortFlag returns the short version of a flag if it exists
-func getShortFlag(flagName string) string {
-	shortFlags := map[string]string{
-		"org-list":                                "l",
-		"concurrency":                             "c",
-		"delay":                                   "d",
-		"enterprise-slug":                         "e",
-		"github-enterprise-server-url":            "u",
-		"dependabot-alerts-available":             "a",
-		"dependabot-security-updates-available":   "s",
-		"copy-from-org":                           "o",
-		"force":                                   "f",
-		"template-org":                            "t",
-	}
-	return shortFlags[flagName]
 }
 
 // quoteIfNeeded adds quotes around a string if it contains spaces
@@ -98,15 +80,6 @@ func ShowReplicationCommand(command string) {
 	pterm.Println()
 	pterm.Info.Println("To replicate this operation, use the following command:")
 	pterm.Println()
-	
-	// Use a box to highlight the command
-	boxedCommand := pterm.DefaultBox.
-		WithTitle("Replication Command").
-		WithTitleTopCenter().
-		WithRightPadding(2).
-		WithLeftPadding(2).
-		WithBoxStyle(pterm.NewStyle(pterm.FgCyan)).
-		Sprint(command)
-	
-	pterm.Println(boxedCommand)
+	pterm.Println(pterm.NewStyle(pterm.FgWhite).Sprint("> ") + pterm.NewStyle(pterm.FgLightGreen).Sprint(command))
+	pterm.Println()
 }
