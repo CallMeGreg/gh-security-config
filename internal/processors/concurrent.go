@@ -8,6 +8,7 @@ import (
 	"github.com/pterm/pterm"
 
 	"github.com/callmegreg/gh-security-config/internal/types"
+	"github.com/callmegreg/gh-security-config/internal/ui"
 )
 
 // ConcurrentProcessor handles concurrent organization processing
@@ -78,6 +79,7 @@ func (cp *ConcurrentProcessor) Process() (successCount, skippedCount, errorCount
 
 		if result.Success {
 			cp.successCount++
+			ui.LogOrgSuccess(result.Organization)
 		} else if result.Skipped {
 			cp.skippedCount++
 			// Skipped message should already be printed by the processor

@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
+
+	"github.com/callmegreg/gh-security-config/internal/ui"
 )
 
 var rootCmd = &cobra.Command{
@@ -13,6 +17,18 @@ var rootCmd = &cobra.Command{
 	Long:  "A GitHub CLI extension to manage security configurations across all organizations in an enterprise",
 	CompletionOptions: cobra.CompletionOptions{
 		HiddenDefaultCmd: true,
+	},
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		levelStr, err := cmd.Flags().GetString("log-level")
+		if err != nil {
+			return err
+		}
+		level, err := ui.ParseLogLevel(levelStr)
+		if err != nil {
+			return err
+		}
+		ui.SetLogLevel(level)
+		return nil
 	},
 }
 
@@ -33,6 +49,7 @@ func init() {
 	// Flags shared by all subcommands
 	rootCmd.PersistentFlags().StringP("config-name", "n", "", "Name of the security configuration to operate on (replaces the interactive configuration-name prompt for each command)")
 	rootCmd.PersistentFlags().String("skip-confirmation-message", "", "Automatically approve the final confirmation prompt for any command (true/false)")
+	rootCmd.PersistentFlags().String("log-level", ui.LogLevelDefault, fmt.Sprintf("Minimum log level for output (%s)", strings.Join(ui.LogLevelValues, ", ")))
 
 	// Mark org targeting flags as mutually exclusive
 	rootCmd.MarkFlagsMutuallyExclusive("org", "org-list", "all-orgs")

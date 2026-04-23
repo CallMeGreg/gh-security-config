@@ -217,7 +217,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		"concurrency":                  commonFlags.Concurrency,
 		"delay":                        commonFlags.Delay,
 		"config-name":                  configName,
-		"skip-confirmation-message":                      fmt.Sprintf("%t", force),
+		"skip-confirmation-message":    fmt.Sprintf("%t", force),
 	}
 
 	// Add org targeting flags

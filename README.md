@@ -101,6 +101,7 @@ These flags are available on all commands:
 - **`--dependabot-security-updates-available string`** (`-s`) - Whether Dependabot Security Updates are available in your GHES instance (true/false)
 - **`--config-name string`** (`-n`) - Name of the security configuration to operate on. Replaces the interactive configuration-name prompt for each command (the meaning is command-specific: the name to create in `generate`, the name to select in `apply`/`delete`/`modify`, or the name of the source config in `generate --copy-from-org`).
 - **`--skip-confirmation-message string`** - Automatically approve the final confirmation prompt for any command (`true`/`false`).
+- **`--log-level string`** - Minimum log level for output (`info`, `warning`, `error`; default: `warning`). When set to `info`, a success message is printed for each organization that is processed successfully.
 
 #### `generate` Command Flags
 

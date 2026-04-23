@@ -8,6 +8,7 @@ import (
 	"github.com/pterm/pterm"
 
 	"github.com/callmegreg/gh-security-config/internal/types"
+	"github.com/callmegreg/gh-security-config/internal/ui"
 )
 
 // SequentialProcessor handles sequential organization processing with optional delay
@@ -61,6 +62,7 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 		if result.Success {
 			sp.successCount++
 			sp.progressBar.UpdateTitle(fmt.Sprintf("Processed %s", result.Organization))
+			ui.LogOrgSuccess(result.Organization)
 		} else if result.Skipped {
 			sp.skippedCount++
 			sp.progressBar.UpdateTitle(fmt.Sprintf("Skipped %s", result.Organization))
