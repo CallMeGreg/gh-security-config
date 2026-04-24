@@ -8,6 +8,7 @@ import (
 	"github.com/pterm/pterm"
 
 	"github.com/callmegreg/gh-security-config/internal/types"
+	"github.com/callmegreg/gh-security-config/internal/ui"
 )
 
 // SequentialProcessor handles sequential organization processing with optional delay
@@ -61,16 +62,20 @@ func (sp *SequentialProcessor) Process() (successCount, skippedCount, errorCount
 		if result.Success {
 			sp.successCount++
 			sp.progressBar.UpdateTitle(fmt.Sprintf("Processed %s", result.Organization))
+			ui.LogOrgSuccess(result.Organization)
 		} else if result.Skipped {
 			sp.skippedCount++
 			sp.progressBar.UpdateTitle(fmt.Sprintf("Skipped %s", result.Organization))
+			if result.SkipReason != "" {
+				ui.LogWarningf("%s", result.SkipReason)
+			}
 		} else if result.Error != nil {
 			sp.errorCount++
 			sp.progressBar.UpdateTitle(fmt.Sprintf("Processed %s", result.Organization))
 			// Check if this is a "configuration exists" error
 			var configExistsErr *types.ConfigurationExistsError
 			if errors.As(result.Error, &configExistsErr) {
-				pterm.Warning.Printf("Configuration '%s' already exists in organization '%s', skipping\n", configExistsErr.ConfigName, result.Organization)
+				ui.LogWarningf("Configuration '%s' already exists in organization '%s', skipping", configExistsErr.ConfigName, result.Organization)
 				sp.skippedCount++
 				sp.errorCount-- // Don't count this as an error
 			} else {

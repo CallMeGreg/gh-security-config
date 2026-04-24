@@ -22,5 +22,6 @@ type ProcessingResult struct {
 	Organization string
 	Success      bool
 	Skipped      bool
+	SkipReason   string
 	Error        error
 }
