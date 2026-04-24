@@ -39,6 +39,7 @@ func BuildReplicationCommand(command string, flags map[string]interface{}) strin
 		"dependabot-security-updates-available",
 		"concurrency",
 		"delay",
+		"log-level",
 		"skip-confirmation-message",
 		"overwrite",
 	}
@@ -48,6 +49,10 @@ func BuildReplicationCommand(command string, flags map[string]interface{}) strin
 			switch v := value.(type) {
 			case string:
 				if v != "" {
+					// Only include log-level if it's not the default
+					if flagName == "log-level" && v == "warning" {
+						continue
+					}
 					parts = append(parts, fmt.Sprintf("--%s %s", flagName, quoteIfNeeded(v)))
 				}
 			case bool:

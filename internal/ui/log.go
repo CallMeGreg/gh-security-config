@@ -3,71 +3,56 @@ package ui
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/pterm/pterm"
+
+	"github.com/callmegreg/gh-security-config/internal/loglevel"
 )
 
-// LogLevel represents the verbosity of output emitted by the extension.
-type LogLevel int
+// LogLevel is an alias for loglevel.LogLevel so existing callers compile unchanged.
+type LogLevel = loglevel.LogLevel
 
+// Re-export log-level constants.
 const (
-	// LogLevelInfo emits informational messages in addition to warnings and errors.
-	LogLevelInfo LogLevel = iota
-	// LogLevelWarning (the default) emits warnings and errors but suppresses info messages.
-	LogLevelWarning
-	// LogLevelError emits only errors.
-	LogLevelError
+	LogLevelInfo    = loglevel.LogLevelInfo
+	LogLevelWarning = loglevel.LogLevelWarning
+	LogLevelError   = loglevel.LogLevelError
 )
 
 // LogLevelDefault is the default log level used when the user does not set one.
-const LogLevelDefault = "warning"
+const LogLevelDefault = loglevel.LogLevelDefault
 
 // LogLevelValues lists the accepted values for the --log-level flag.
-var LogLevelValues = []string{"info", "warning", "error"}
+var LogLevelValues = loglevel.LogLevelValues
 
-var (
-	logLevelMu sync.RWMutex
-	logLevel   = LogLevelWarning
-)
+// ParseLogLevel delegates to loglevel.ParseLogLevel.
+func ParseLogLevel(value string) (LogLevel, error) { return loglevel.ParseLogLevel(value) }
 
-// ParseLogLevel converts a user-supplied string to a LogLevel. The comparison is
-// case-insensitive and whitespace is trimmed. An empty string resolves to the
-// default level.
-func ParseLogLevel(value string) (LogLevel, error) {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	if normalized == "" {
-		normalized = LogLevelDefault
-	}
-	switch normalized {
-	case "info":
-		return LogLevelInfo, nil
-	case "warning":
-		return LogLevelWarning, nil
-	case "error":
-		return LogLevelError, nil
-	default:
-		return LogLevelWarning, fmt.Errorf("invalid value for log-level flag: %q (must be one of: %s)", value, strings.Join(LogLevelValues, ", "))
-	}
-}
+// SetLogLevel delegates to loglevel.SetLogLevel.
+func SetLogLevel(level LogLevel) { loglevel.SetLogLevel(level) }
 
-// SetLogLevel updates the package-level log level. Safe for concurrent use.
-func SetLogLevel(level LogLevel) {
-	logLevelMu.Lock()
-	defer logLevelMu.Unlock()
-	logLevel = level
-}
+// GetLogLevel delegates to loglevel.GetLogLevel.
+func GetLogLevel() LogLevel { return loglevel.GetLogLevel() }
 
-// GetLogLevel returns the current log level. Safe for concurrent use.
-func GetLogLevel() LogLevel {
-	logLevelMu.RLock()
-	defer logLevelMu.RUnlock()
-	return logLevel
-}
+// WarningEnabled reports whether warning messages should be emitted.
+func WarningEnabled() bool { return loglevel.WarningEnabled() }
 
 // InfoEnabled reports whether informational messages should be emitted.
-func InfoEnabled() bool {
-	return GetLogLevel() <= LogLevelInfo
+func InfoEnabled() bool { return loglevel.InfoEnabled() }
+
+// LogWarningf prints a warning message using pterm.Warning only when the
+// current log level is `warning` or lower. The format string and arguments
+// follow the usual fmt.Printf conventions and a trailing newline is appended
+// when absent.
+func LogWarningf(format string, args ...interface{}) {
+	if !WarningEnabled() {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	if !strings.HasSuffix(msg, "\n") {
+		msg += "\n"
+	}
+	pterm.Warning.Print(msg)
 }
 
 // LogInfof prints an informational message using pterm.Info only when the

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/pterm/pterm"
+
+	"github.com/callmegreg/gh-security-config/internal/loglevel"
 )
 
 // ReadOrganizationsFromCSV reads organization names from a CSV file
@@ -34,7 +36,9 @@ func ReadOrganizationsFromCSV(filePath string) ([]string, error) {
 		}
 		// Basic validation for organization name format
 		if strings.Contains(orgName, " ") || strings.Contains(orgName, "/") {
-			pterm.Warning.Printf("Line %d: Invalid organization name format '%s', skipping\n", i+1, orgName)
+			if loglevel.WarningEnabled() {
+				pterm.Warning.Printf("Line %d: Invalid organization name format '%s', skipping\n", i+1, orgName)
+			}
 			continue
 		}
 		orgs = append(orgs, orgName)

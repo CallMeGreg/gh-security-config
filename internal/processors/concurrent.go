@@ -82,13 +82,15 @@ func (cp *ConcurrentProcessor) Process() (successCount, skippedCount, errorCount
 			ui.LogOrgSuccess(result.Organization)
 		} else if result.Skipped {
 			cp.skippedCount++
-			// Skipped message should already be printed by the processor
+			if result.SkipReason != "" {
+				ui.LogWarningf("%s", result.SkipReason)
+			}
 		} else if result.Error != nil {
 			cp.errorCount++
 			// Check if this is a "configuration exists" error
 			var configExistsErr *types.ConfigurationExistsError
 			if errors.As(result.Error, &configExistsErr) {
-				pterm.Warning.Printf("Configuration '%s' already exists in organization '%s', skipping\n", configExistsErr.ConfigName, result.Organization)
+				ui.LogWarningf("Configuration '%s' already exists in organization '%s', skipping", configExistsErr.ConfigName, result.Organization)
 				cp.skippedCount++
 				cp.errorCount-- // Don't count this as an error
 			} else {

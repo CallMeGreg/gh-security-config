@@ -33,11 +33,11 @@ func DisplayCurrentSettings(settings map[string]interface{}, description string)
 // ShowNoOrganizationsWarning displays appropriate warning based on org targeting mode
 func ShowNoOrganizationsWarning(flags *utils.CommonFlags) {
 	if flags.Org != "" {
-		pterm.Warning.Printf("Organization '%s' was not found or is not accessible.\n", flags.Org)
+		LogWarningf("Organization '%s' was not found or is not accessible.", flags.Org)
 	} else if flags.OrgListPath != "" {
-		pterm.Warning.Println("No valid organizations found in the CSV file.")
+		LogWarningf("No valid organizations found in the CSV file.")
 	} else if flags.AllOrgs {
-		pterm.Warning.Println("No organizations found in the enterprise.")
+		LogWarningf("No organizations found in the enterprise.")
 	}
 }
 

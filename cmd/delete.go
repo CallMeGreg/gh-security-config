@@ -135,15 +135,15 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	pterm.Info.Printf("Fetching security configurations from template organization '%s'...\n", templateOrg)
 	status, err := api.CheckSingleOrganizationMembership(templateOrg)
 	if err != nil {
-		pterm.Warning.Printf("Could not access template organization '%s': %v\n", templateOrg, err)
+		ui.LogWarningf("Could not access template organization '%s': %v", templateOrg, err)
 	} else if !status.IsMember {
-		pterm.Warning.Printf("You must be a member of template organization '%s' to fetch configurations\n", templateOrg)
+		ui.LogWarningf("You must be a member of template organization '%s' to fetch configurations", templateOrg)
 	} else if !status.IsOwner {
-		pterm.Warning.Printf("You must be an owner of template organization '%s' to fetch configurations\n", templateOrg)
+		ui.LogWarningf("You must be an owner of template organization '%s' to fetch configurations", templateOrg)
 	} else {
 		configs, err := api.FetchSecurityConfigurations(templateOrg)
 		if err != nil {
-			pterm.Warning.Printf("Could not fetch configurations from template organization '%s': %v\n", templateOrg, err)
+			ui.LogWarningf("Could not fetch configurations from template organization '%s': %v", templateOrg, err)
 		} else {
 			for _, config := range configs {
 				// Only add organization-level configs (not enterprise configs shown at org level)
@@ -209,6 +209,12 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	utils.PrintCompletionHeader("Security Configuration Deletion", successCount, skippedCount, errorCount)
 
+	// Extract log level flag
+	logLevel, err := cmd.Flags().GetString("log-level")
+	if err != nil {
+		return err
+	}
+
 	// Build and display replication command
 	replicationFlags := map[string]interface{}{
 		"enterprise-slug":              enterprise,
@@ -216,6 +222,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		"template-org":                 templateOrg,
 		"concurrency":                  commonFlags.Concurrency,
 		"delay":                        commonFlags.Delay,
+		"log-level":                    logLevel,
 		"config-name":                  configName,
 		"skip-confirmation-message":    fmt.Sprintf("%t", force),
 	}

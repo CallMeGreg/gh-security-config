@@ -3,10 +3,9 @@ package processors
 import (
 	"fmt"
 
-	"github.com/pterm/pterm"
-
 	"github.com/callmegreg/gh-security-config/internal/api"
 	"github.com/callmegreg/gh-security-config/internal/types"
+	"github.com/callmegreg/gh-security-config/internal/ui"
 )
 
 // DeleteProcessor implements OrganizationProcessor for the delete command
@@ -44,7 +43,7 @@ func (dp *DeleteProcessor) deleteConfigurationFromOrg(org string) (bool, error) 
 	// Find the configuration by name
 	configID, found := api.FindConfigurationByName(configs, dp.ConfigName)
 	if !found {
-		pterm.Warning.Printf("Configuration '%s' not found in organization '%s', skipping\n", dp.ConfigName, org)
+		ui.LogWarningf("Configuration '%s' not found in organization '%s', skipping", dp.ConfigName, org)
 		return false, nil // Not an error, just skip this org
 	}
 

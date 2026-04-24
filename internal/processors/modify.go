@@ -3,10 +3,9 @@ package processors
 import (
 	"fmt"
 
-	"github.com/pterm/pterm"
-
 	"github.com/callmegreg/gh-security-config/internal/api"
 	"github.com/callmegreg/gh-security-config/internal/types"
+	"github.com/callmegreg/gh-security-config/internal/ui"
 )
 
 // ModifyProcessor implements OrganizationProcessor for the modify command
@@ -47,7 +46,7 @@ func (mp *ModifyProcessor) modifyConfigurationInOrg(org string) (bool, error) {
 	// Find the configuration by name
 	configID, found := api.FindConfigurationByName(configs, mp.ConfigName)
 	if !found {
-		pterm.Warning.Printf("Configuration '%s' not found in organization '%s', skipping\n", mp.ConfigName, org)
+		ui.LogWarningf("Configuration '%s' not found in organization '%s', skipping", mp.ConfigName, org)
 		return false, nil // Not an error, just skip this org
 	}
 

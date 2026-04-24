@@ -117,7 +117,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	ghesVersion, err := api.GetGHESVersion()
 	var enterpriseConfigCount int
 	if err != nil {
-		pterm.Warning.Printf("Could not detect GHES version: %v\n", err)
+		ui.LogWarningf("Could not detect GHES version: %v", err)
 		pterm.Info.Println("Assuming enterprise configurations are not available")
 		ghesVersion = ""
 	} else if ghesVersion != "" {
@@ -129,7 +129,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 		pterm.Info.Println("Fetching enterprise security configurations...")
 		enterpriseConfigs, err := api.FetchEnterpriseSecurityConfigurations(enterprise)
 		if err != nil {
-			pterm.Warning.Printf("Could not fetch enterprise configurations: %v\n", err)
+			ui.LogWarningf("Could not fetch enterprise configurations: %v", err)
 		} else {
 			enterpriseConfigCount = len(enterpriseConfigs)
 			if enterpriseConfigCount > 0 {
@@ -184,15 +184,15 @@ func runModify(cmd *cobra.Command, args []string) error {
 	var orgConfigNames []string
 	status, err := api.CheckSingleOrganizationMembership(templateOrg)
 	if err != nil {
-		pterm.Warning.Printf("Could not access template organization '%s': %v\n", templateOrg, err)
+		ui.LogWarningf("Could not access template organization '%s': %v", templateOrg, err)
 	} else if !status.IsMember {
-		pterm.Warning.Printf("You must be a member of template organization '%s' to fetch configurations\n", templateOrg)
+		ui.LogWarningf("You must be a member of template organization '%s' to fetch configurations", templateOrg)
 	} else if !status.IsOwner {
-		pterm.Warning.Printf("You must be an owner of template organization '%s' to fetch configurations\n", templateOrg)
+		ui.LogWarningf("You must be an owner of template organization '%s' to fetch configurations", templateOrg)
 	} else {
 		configs, err := api.FetchSecurityConfigurations(templateOrg)
 		if err != nil {
-			pterm.Warning.Printf("Could not fetch configurations from template organization '%s': %v\n", templateOrg, err)
+			ui.LogWarningf("Could not fetch configurations from template organization '%s': %v", templateOrg, err)
 		} else {
 			for _, config := range configs {
 				// Only add organization-level configs (not enterprise configs shown at org level)
@@ -261,7 +261,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	if currentSettings == nil {
-		pterm.Warning.Printf("Configuration '%s' not found in template organization '%s'.\n", configName, templateOrg)
+		ui.LogWarningf("Configuration '%s' not found in template organization '%s'.", configName, templateOrg)
 		return fmt.Errorf("configuration '%s' not found in template org", configName)
 	}
 
@@ -321,6 +321,12 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 	utils.PrintCompletionHeader("Security Configuration Modification", successCount, skippedCount, errorCount)
 
+	// Extract log level flag
+	logLevel, err := cmd.Flags().GetString("log-level")
+	if err != nil {
+		return err
+	}
+
 	// Build and display replication command
 	replicationFlags := map[string]interface{}{
 		"enterprise-slug":                       enterprise,
@@ -330,6 +336,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 		"dependabot-security-updates-available": fmt.Sprintf("%t", dependabotSecurityUpdatesAvailable),
 		"concurrency":                           commonFlags.Concurrency,
 		"delay":                                 commonFlags.Delay,
+		"log-level":                             logLevel,
 		"config-name":                           configName,
 		"new-name":                              newName,
 		"new-description":                       newDescription,

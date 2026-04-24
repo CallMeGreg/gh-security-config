@@ -277,6 +277,12 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 	utils.PrintCompletionHeader("Security Configuration Generation", successCount, skippedCount, errorCount)
 
+	// Extract log level flag
+	logLevel, err := cmd.Flags().GetString("log-level")
+	if err != nil {
+		return err
+	}
+
 	// Build and display replication command
 	replicationFlags := map[string]interface{}{
 		"enterprise-slug":                       enterprise,
@@ -285,6 +291,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		"dependabot-security-updates-available": fmt.Sprintf("%t", dependabotSecurityUpdatesAvailable),
 		"concurrency":                           commonFlags.Concurrency,
 		"delay":                                 commonFlags.Delay,
+		"log-level":                             logLevel,
 		"config-name":                           configName,
 		"scope":                                 scope,
 		"set-as-default":                        fmt.Sprintf("%t", setAsDefault),

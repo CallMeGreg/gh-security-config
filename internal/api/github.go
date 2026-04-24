@@ -8,6 +8,7 @@ import (
 	"github.com/cli/go-gh/v2"
 	"github.com/pterm/pterm"
 
+	"github.com/callmegreg/gh-security-config/internal/loglevel"
 	"github.com/callmegreg/gh-security-config/internal/types"
 )
 
@@ -44,7 +45,9 @@ func CheckSingleOrganizationMembership(org string) (types.MembershipStatus, erro
 	}
 
 	if err := json.Unmarshal(userResponse.Bytes(), &membership); err != nil {
-		pterm.Warning.Printf("Failed to parse membership data for organization '%s': %v\n", org, err)
+		if loglevel.WarningEnabled() {
+			pterm.Warning.Printf("Failed to parse membership data for organization '%s': %v\n", org, err)
+		}
 		return types.MembershipStatus{IsMember: false, IsOwner: false, Role: "none"}, nil
 	}
 
@@ -66,16 +69,13 @@ func CheckSingleOrganizationMembership(org string) (types.MembershipStatus, erro
 func ValidateMembershipAndSkip(org string) *types.ProcessingResult {
 	status, err := CheckSingleOrganizationMembership(org)
 	if err != nil {
-		pterm.Warning.Printf("Failed to check membership for organization '%s': %v, skipping\n", org, err)
-		return &types.ProcessingResult{Organization: org, Skipped: true}
+		return &types.ProcessingResult{Organization: org, Skipped: true, SkipReason: fmt.Sprintf("Failed to check membership for organization '%s': %v, skipping", org, err)}
 	}
 	if !status.IsMember {
-		pterm.Warning.Printf("Skipping organization '%s': You are not a member\n", org)
-		return &types.ProcessingResult{Organization: org, Skipped: true}
+		return &types.ProcessingResult{Organization: org, Skipped: true, SkipReason: fmt.Sprintf("Skipping organization '%s': You are not a member", org)}
 	}
 	if !status.IsOwner {
-		pterm.Warning.Printf("Skipping organization '%s': You are a member but not an owner\n", org)
-		return &types.ProcessingResult{Organization: org, Skipped: true}
+		return &types.ProcessingResult{Organization: org, Skipped: true, SkipReason: fmt.Sprintf("Skipping organization '%s': You are a member but not an owner", org)}
 	}
 	return nil // No skip needed
 }
