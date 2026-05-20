@@ -10,6 +10,10 @@ permissions:
   id-token: write
   attestations: write
   pull-requests: read
+  # TODO: Consider moving these permissions to the job level rather than
+  # the workflow level to reduce blast radius. The release job needs
+  # contents:write (push tag), id-token:write and attestations:write
+  # (generate attestations), and pull-requests:read (determine release type).
 
 jobs:
   release:
